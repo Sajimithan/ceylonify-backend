@@ -1,0 +1,14 @@
+
+> listing-service@0.0.1 lint D:\Level 3\Ceylonify-Dev\services\listing-service
+> eslint "{src,apps,libs,test}/**/*.ts" --fix
+
+
+D:\Level 3\Ceylonify-Dev\services\listing-service\src\app.controller.spec.ts
+  19:14  error  Unsafe call of a type that could not be resolved  @typescript-eslint/no-unsafe-call
+
+D:\Level 3\Ceylonify-Dev\services\listing-service\src\main.ts
+  8:1  warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+
+??? 2 problems (1 error, 1 warning)
+
+???ELIFECYCLE??? Command failed with exit code 1.

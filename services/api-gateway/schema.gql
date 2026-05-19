@@ -1,0 +1,108 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type ServiceHealth {
+  service: String!
+  ok: Boolean!
+  error: String
+  data: String
+}
+
+type Me {
+  firebaseUid: String!
+  email: String
+  role: String!
+}
+
+type UserRecord {
+  id: String!
+  firebaseUid: String!
+  email: String
+  role: String!
+  createdAt: String!
+}
+
+type UserStats {
+  total: Float!
+  travelers: Float!
+  hosts: Float!
+  admins: Float!
+}
+
+type Listing {
+  id: ID!
+  title: String!
+  description: String!
+  type: String!
+  category: String
+  price: String
+  placeName: String
+  mapLink: String
+  imageUrl: String
+  status: String!
+  createdAt: String!
+  lat: Float
+  lng: Float
+  createdBy: String
+  rejectionReason: String
+}
+
+type ListingStats {
+  total: Float!
+  pending: Float!
+  approved: Float!
+  rejected: Float!
+}
+
+type Query {
+  ping: String!
+  me: Me!
+  adminAllUsers: [UserRecord!]!
+  adminUserStats: UserStats!
+  myListings: [Listing!]!
+  feed: [Listing!]!
+  listing(id: String!): Listing!
+  adminAllListings: [Listing!]!
+  adminListingStats: ListingStats!
+  pendingListings: [Listing!]!
+  healthAll: [ServiceHealth!]!
+}
+
+type Mutation {
+  adminChangeUserRole(id: String!, role: String!): UserRecord!
+  createListing(input: CreateListingInput!): Listing!
+  updateListing(id: String!, input: UpdateListingInput!): Listing!
+  deleteListing(id: String!): Listing!
+  approveListing(id: ID!): Listing!
+  rejectListing(id: ID!, reason: String!): Listing!
+  registerDeviceToken(token: String!): Boolean!
+}
+
+input CreateListingInput {
+  title: String!
+  description: String!
+  type: String!
+  category: String
+  price: Float
+  startDateTime: String
+  placeName: String
+  mapLink: String
+  imageUrl: String
+  lat: Float!
+  lng: Float!
+}
+
+input UpdateListingInput {
+  title: String
+  description: String
+  type: String
+  category: String
+  price: Float
+  startDateTime: String
+  placeName: String
+  mapLink: String
+  imageUrl: String
+  lat: Float
+  lng: Float
+}

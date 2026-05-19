@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  TRAVELER
+  HOST
+  ADMIN
+}
+
+model User {
+  id          String   @id @default(uuid())
+  firebaseUid String   @unique
+  email       String?
+  role        Role     @default(TRAVELER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

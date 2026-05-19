@@ -1,0 +1,16 @@
+{
+  "name": "ceylonify-backend",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "format": "prettier -w .",
+    "lint": "eslint .",
+    "dev:db": "docker compose -f infrastructure/docker/docker-compose.yml up -d",
+    "down:db": "docker compose -f infrastructure/docker/docker-compose.yml down",
+    "logs:db": "docker compose -f infrastructure/docker/docker-compose.yml logs -f"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
+  }
+}
