@@ -1,5 +1,13 @@
 import { UseGuards } from '@nestjs/common';
-import { Resolver, Query, ObjectType, Field, Mutation, Args } from '@nestjs/graphql';
+import {
+  Resolver,
+  Query,
+  ObjectType,
+  Field,
+  Mutation,
+  Args,
+  ID,
+} from '@nestjs/graphql';
 import * as admin from 'firebase-admin';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -9,13 +17,19 @@ import {
   adminAllUsers,
   adminUserStats,
   adminChangeUserRole,
+  getSavedListings,
+  addSavedListing,
+  removeSavedListing,
 } from '../identity/identity.client';
+import { getListing } from '../listings/listings.client';
+import { Listing } from '../listings/listings.resolver';
 
 @ObjectType()
 class Me {
   @Field() firebaseUid!: string;
   @Field({ nullable: true }) email?: string;
   @Field() role!: string;
+  @Field() isPremium!: boolean;
 }
 
 @ObjectType()
@@ -46,32 +60,63 @@ export class MeResolver {
   @UseGuards(AuthGuard)
   @Query(() => Me)
   async me(@CurrentUser() user: admin.auth.DecodedIdToken) {
-    // user.uid + user.email come from Firebase token
     await upsertUser(user.uid, user.email);
     const profile = (await getUser(user.uid)) as UserProfile;
-
     return {
       firebaseUid: profile.firebaseUid,
       email: profile.email ?? null,
       role: profile.role,
+      isPremium: profile.role === 'HOST' || profile.role === 'ADMIN',
     };
   }
 
-  // Admin: Get all users
+  // ── Saved Listings ──────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Query(() => [Listing])
+  async savedListings(@CurrentUser() user: admin.auth.DecodedIdToken) {
+    const saved = (await getSavedListings(user.uid)) as { listingId: string }[];
+    if (!saved.length) return [];
+    const results = await Promise.all(
+      saved.map(({ listingId }) => getListing(listingId).catch(() => null)),
+    );
+    return results.filter(Boolean);
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async saveListing(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('listingId', { type: () => ID }) listingId: string,
+  ) {
+    await addSavedListing(user.uid, listingId);
+    return true;
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async unsaveListing(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('listingId', { type: () => ID }) listingId: string,
+  ) {
+    await removeSavedListing(user.uid, listingId);
+    return true;
+  }
+
+  // ── Admin ───────────────────────────────────────────────────────────────────
+
   @UseGuards(AuthGuard)
   @Query(() => [UserRecord])
   async adminAllUsers() {
     return (await adminAllUsers()) as UserRecord[];
   }
 
-  // Admin: User Stats
   @UseGuards(AuthGuard)
   @Query(() => UserStats)
   async adminUserStats() {
     return (await adminUserStats()) as UserStats;
   }
 
-  // Admin: Change Role
   @UseGuards(AuthGuard)
   @Mutation(() => UserRecord)
   async adminChangeUserRole(

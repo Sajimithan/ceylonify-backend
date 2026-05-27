@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -53,4 +54,8 @@ export class UpdateListingDto {
   @IsOptional()
   @IsNumber()
   lng?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isPremium?: boolean;
 }

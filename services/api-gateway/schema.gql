@@ -9,10 +9,44 @@ type ServiceHealth {
   data: String
 }
 
+type Listing {
+  id: ID!
+  title: String!
+  description: String!
+  type: String!
+  category: String
+  price: String
+  placeName: String
+  mapLink: String
+  imageUrl: String
+  status: String!
+  createdAt: String!
+  lat: Float
+  lng: Float
+  createdBy: String
+  rejectionReason: String
+  startDateTime: String
+  isPremium: Boolean!
+  viewCount: Int!
+}
+
+type ListingStats {
+  total: Float!
+  pending: Float!
+  approved: Float!
+  rejected: Float!
+}
+
+type SearchResult {
+  listings: [Listing!]!
+  total: Int!
+}
+
 type Me {
   firebaseUid: String!
   email: String
   role: String!
+  isPremium: Boolean!
 }
 
 type UserRecord {
@@ -30,37 +64,15 @@ type UserStats {
   admins: Float!
 }
 
-type Listing {
-  id: ID!
-  title: String!
-  description: String!
-  type: String!
-  category: String
-  price: String
-  placeName: String
-  mapLink: String
-  imageUrl: String
-  status: String!
-  createdAt: String!
-  lat: Float
-  lng: Float
-  createdBy: String
-  rejectionReason: String
-}
-
-type ListingStats {
-  total: Float!
-  pending: Float!
-  approved: Float!
-  rejected: Float!
-}
-
 type Query {
   ping: String!
   me: Me!
+  savedListings: [Listing!]!
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
   myListings: [Listing!]!
+  searchListings(q: String, category: String, type: String, limit: Int, offset: Int): SearchResult!
+  relatedListings(listingId: String!, limit: Int): [Listing!]!
   feed: [Listing!]!
   listing(id: String!): Listing!
   adminAllListings: [Listing!]!
@@ -70,10 +82,13 @@ type Query {
 }
 
 type Mutation {
+  saveListing(listingId: ID!): Boolean!
+  unsaveListing(listingId: ID!): Boolean!
   adminChangeUserRole(id: String!, role: String!): UserRecord!
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
   deleteListing(id: String!): Listing!
+  enhanceDescription(text: String!): String!
   approveListing(id: ID!): Listing!
   rejectListing(id: ID!, reason: String!): Listing!
   registerDeviceToken(token: String!): Boolean!
@@ -91,6 +106,7 @@ input CreateListingInput {
   imageUrl: String
   lat: Float!
   lng: Float!
+  isPremium: Boolean
 }
 
 input UpdateListingInput {
@@ -105,4 +121,5 @@ input UpdateListingInput {
   imageUrl: String
   lat: Float
   lng: Float
+  isPremium: Boolean
 }

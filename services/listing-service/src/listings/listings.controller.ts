@@ -5,6 +5,7 @@ import {
   Patch,
   Post,
   Param,
+  Query,
   Headers,
   UsePipes,
   ValidationPipe,
@@ -70,6 +71,23 @@ export class ListingsController {
   @Get('stats')
   getStats() {
     return this.listings.getListingStats();
+  }
+
+  @Get('search')
+  search(
+    @Query('q') q?: string,
+    @Query('category') category?: string,
+    @Query('type') type?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.listings.searchListings({
+      q,
+      category,
+      type,
+      limit: limit ? parseInt(limit, 10) : 12,
+      offset: offset ? parseInt(offset, 10) : 0,
+    });
   }
 
   // Get single listing

@@ -4,6 +4,7 @@ import {
   Field,
   ID,
   InputType,
+  Int,
   ObjectType,
   Query,
   Resolver,
@@ -13,7 +14,9 @@ import {
 } from '@nestjs/graphql';
 import * as admin from 'firebase-admin';
 import { AuthGuard } from '../auth/auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { enhanceDescription, moderateListing } from '../ai/ai.service';
 
 import {
   createListing,
@@ -27,20 +30,20 @@ import {
   getListing,
   adminAllListings,
   adminListingStats,
+  searchListings,
 } from './listings.client';
 
+// ── ObjectTypes ──────────────────────────────────────────────────────────────
+
 @ObjectType()
-class Listing {
+export class Listing {
   @Field(() => ID) id!: string;
   @Field() title!: string;
   @Field() description!: string;
   @Field() type!: string;
 
   @Field({ nullable: true }) category?: string;
-
-  // Note: keep as string if your listing-service returns it as string
   @Field({ nullable: true }) price?: string;
-
   @Field({ nullable: true }) placeName?: string;
   @Field({ nullable: true }) mapLink?: string;
   @Field({ nullable: true }) imageUrl?: string;
@@ -48,22 +51,14 @@ class Listing {
   @Field() status!: string;
   @Field() createdAt!: string;
 
-  // ✅ Helpful for Admin screen (optional)
   @Field({ nullable: true }) lat?: number;
   @Field({ nullable: true }) lng?: number;
-
-  // ✅ who created it (host uid/email). optional.
   @Field({ nullable: true }) createdBy?: string;
-
-  // ✅ if rejected, store reason (optional)
   @Field({ nullable: true }) rejectionReason?: string;
-}
 
-interface ListingEntity {
-  hostFirebaseUid?: string;
-  location?: {
-    coordinates: [number, number];
-  };
+  @Field({ nullable: true }) startDateTime?: string;
+  @Field() isPremium!: boolean;
+  @Field(() => Int) viewCount!: number;
 }
 
 @ObjectType()
@@ -74,6 +69,14 @@ export class ListingStats {
   @Field() rejected!: number;
 }
 
+@ObjectType()
+class SearchResult {
+  @Field(() => [Listing]) listings!: Listing[];
+  @Field(() => Int) total!: number;
+}
+
+// ── InputTypes ───────────────────────────────────────────────────────────────
+
 @InputType()
 class CreateListingInput {
   @Field() title!: string;
@@ -83,13 +86,13 @@ class CreateListingInput {
   @Field({ nullable: true }) category?: string;
   @Field({ nullable: true }) price?: number;
   @Field({ nullable: true }) startDateTime?: string;
-
   @Field({ nullable: true }) placeName?: string;
   @Field({ nullable: true }) mapLink?: string;
   @Field({ nullable: true }) imageUrl?: string;
 
   @Field() lat!: number;
   @Field() lng!: number;
+  @Field({ nullable: true }) isPremium?: boolean;
 }
 
 @InputType()
@@ -101,27 +104,48 @@ class UpdateListingInput {
   @Field({ nullable: true }) category?: string;
   @Field({ nullable: true }) price?: number;
   @Field({ nullable: true }) startDateTime?: string;
-
   @Field({ nullable: true }) placeName?: string;
   @Field({ nullable: true }) mapLink?: string;
   @Field({ nullable: true }) imageUrl?: string;
 
   @Field({ nullable: true }) lat?: number;
   @Field({ nullable: true }) lng?: number;
+  @Field({ nullable: true }) isPremium?: boolean;
 }
+
+// ── Entity interface (for field resolvers) ───────────────────────────────────
+
+interface ListingEntity {
+  id?: string;
+  hostFirebaseUid?: string;
+  rejectReason?: string;
+  isPremium?: boolean;
+  viewCount?: number;
+  location?: { coordinates: [number, number] };
+}
+
+// ── Resolver ─────────────────────────────────────────────────────────────────
 
 @Resolver(() => Listing)
 export class ListingsResolver {
-  // -----------------------
-  // Host operations
-  // -----------------------
+  // ── Host operations ───────────────────────────────────────────────────────
+
   @UseGuards(AuthGuard)
   @Mutation(() => Listing)
   async createListing(
     @CurrentUser() user: admin.auth.DecodedIdToken,
     @Args('input') input: CreateListingInput,
   ) {
-    return (await createListing(user.uid, input)) as Listing;
+    const result = (await createListing(user.uid, input)) as Listing;
+    // Fire-and-forget AI moderation — never blocks creation
+    void moderateListing(input.title, input.description).then((r) => {
+      if (r.flagged) {
+        console.warn(
+          `[AI] Listing ${result.id} flagged for: ${r.reason ?? 'unknown'}`,
+        );
+      }
+    });
+    return result;
   }
 
   @UseGuards(AuthGuard)
@@ -149,62 +173,83 @@ export class ListingsResolver {
     return (await myListings(user.uid)) as Listing[];
   }
 
-  // -----------------------
-  // Admin moderation operations
-  // (Day 5)
-  // -----------------------
+  // ── AI ────────────────────────────────────────────────────────────────────
 
-  /**
-   * Public Feed: Approved listings for mobile app
-   * No authentication required - this is a public endpoint
-   */
+  @UseGuards(AuthGuard)
+  @Mutation(() => String)
+  async enhanceDescription(@Args('text') text: string) {
+    return enhanceDescription(text);
+  }
+
+  // ── Search / Browse ───────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Query(() => SearchResult)
+  async searchListings(
+    @Args('q', { nullable: true }) q?: string,
+    @Args('category', { nullable: true }) category?: string,
+    @Args('type', { nullable: true }) type?: string,
+    @Args('limit', { nullable: true, type: () => Int }) limit?: number,
+    @Args('offset', { nullable: true, type: () => Int }) offset?: number,
+  ) {
+    return (await searchListings({ q, category, type, limit, offset })) as SearchResult;
+  }
+
+  @UseGuards(AuthGuard)
+  @Query(() => [Listing])
+  async relatedListings(
+    @Args('listingId') listingId: string,
+    @Args('limit', { nullable: true, type: () => Int }) limit?: number,
+  ) {
+    const listing = (await getListing(listingId)) as ListingEntity & { category?: string };
+    if (!listing?.category) return [];
+    const result = (await searchListings({
+      category: listing.category,
+      limit: (limit ?? 4) + 1,
+      offset: 0,
+    })) as SearchResult;
+    return result.listings.filter((l) => l.id !== listingId).slice(0, limit ?? 4);
+  }
+
+  // ── Public ────────────────────────────────────────────────────────────────
+
   @Query(() => [Listing])
   async feed() {
     return (await feed()) as Listing[];
   }
 
+  @UseGuards(AuthGuard)
   @Query(() => Listing)
   async listing(@Args('id') id: string) {
     return (await getListing(id)) as Listing;
   }
 
-  // --- ADMIN QUERIES ---
+  // ── Admin ─────────────────────────────────────────────────────────────────
 
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, AdminGuard)
   @Query(() => [Listing])
   async adminAllListings() {
     return (await adminAllListings()) as Listing[];
   }
 
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, AdminGuard)
   @Query(() => ListingStats)
   async adminListingStats() {
     return (await adminListingStats()) as ListingStats;
   }
 
-  /**
-   * Get all PENDING listings for admin review
-   * NOTE: Today we only guard with AuthGuard.
-   * Later you can add AdminGuard / roles.
-   */
   @UseGuards(AuthGuard)
   @Query(() => [Listing])
   async pendingListings() {
     return (await pendingListings()) as Listing[];
   }
 
-  /**
-   * Approve a listing
-   */
   @UseGuards(AuthGuard)
   @Mutation(() => Listing)
   async approveListing(@Args('id', { type: () => ID }) id: string) {
     return (await approveListing(id)) as Listing;
   }
 
-  /**
-   * Reject a listing with a reason
-   */
   @UseGuards(AuthGuard)
   @Mutation(() => Listing)
   async rejectListing(
@@ -214,32 +259,35 @@ export class ListingsResolver {
     return (await rejectListing(id, reason)) as Listing;
   }
 
-  // Resolvers for derived fields
+  // ── Field resolvers ───────────────────────────────────────────────────────
 
   @ResolveField(() => Number, { nullable: true })
   lat(@Parent() listing: ListingEntity) {
-    if (
-      listing.location?.coordinates &&
-      listing.location.coordinates.length === 2
-    ) {
-      return listing.location.coordinates[1];
-    }
-    return null;
+    return listing.location?.coordinates?.[1] ?? null;
   }
 
   @ResolveField(() => Number, { nullable: true })
   lng(@Parent() listing: ListingEntity) {
-    if (
-      listing.location?.coordinates &&
-      listing.location.coordinates.length === 2
-    ) {
-      return listing.location.coordinates[0];
-    }
-    return null;
+    return listing.location?.coordinates?.[0] ?? null;
   }
 
   @ResolveField(() => String, { nullable: true })
   createdBy(@Parent() listing: ListingEntity) {
-    return listing.hostFirebaseUid || null;
+    return listing.hostFirebaseUid ?? null;
+  }
+
+  @ResolveField(() => String, { nullable: true })
+  rejectionReason(@Parent() listing: ListingEntity) {
+    return listing.rejectReason ?? null;
+  }
+
+  @ResolveField(() => Boolean)
+  isPremium(@Parent() listing: ListingEntity) {
+    return listing.isPremium ?? false;
+  }
+
+  @ResolveField(() => Int)
+  viewCount(@Parent() listing: ListingEntity) {
+    return listing.viewCount ?? 0;
   }
 }

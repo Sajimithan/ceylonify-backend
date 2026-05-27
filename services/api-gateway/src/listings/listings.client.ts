@@ -89,3 +89,22 @@ export async function getListing(id: string) {
   const res = await axios.get(`${SERVICES.listing}/listings/${id}`);
   return res.data as unknown;
 }
+
+export async function searchListings(params: {
+  q?: string;
+  category?: string;
+  type?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params.q) query.set('q', params.q);
+  if (params.category) query.set('category', params.category);
+  if (params.type) query.set('type', params.type);
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
+  if (params.offset !== undefined) query.set('offset', String(params.offset));
+  const res = await axios.get(
+    `${SERVICES.listing}/listings/search?${query.toString()}`,
+  );
+  return res.data as unknown;
+}

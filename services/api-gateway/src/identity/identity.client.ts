@@ -4,10 +4,7 @@ import { SERVICES } from '../config/services';
 export async function upsertUser(firebaseUid: string, email?: string) {
   const res = await axios.post(
     `${SERVICES.identity}/users/upsert-from-firebase`,
-    {
-      firebaseUid,
-      email,
-    },
+    { firebaseUid, email },
   );
   return res.data as unknown;
 }
@@ -33,5 +30,31 @@ export async function adminChangeUserRole(id: string, role: string) {
   const res = await axios.patch(`${SERVICES.identity}/users/${id}/role`, {
     role,
   });
+  return res.data as unknown;
+}
+
+// ── Saved Listings ──────────────────────────────────────────────────────────
+
+export async function getSavedListings(firebaseUid: string) {
+  const res = await axios.get(
+    `${SERVICES.identity}/users/${firebaseUid}/saved`,
+  );
+  return res.data as unknown;
+}
+
+export async function addSavedListing(firebaseUid: string, listingId: string) {
+  const res = await axios.post(
+    `${SERVICES.identity}/users/${firebaseUid}/saved/${listingId}`,
+  );
+  return res.data as unknown;
+}
+
+export async function removeSavedListing(
+  firebaseUid: string,
+  listingId: string,
+) {
+  const res = await axios.delete(
+    `${SERVICES.identity}/users/${firebaseUid}/saved/${listingId}`,
+  );
   return res.data as unknown;
 }

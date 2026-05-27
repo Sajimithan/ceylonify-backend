@@ -41,6 +41,7 @@ export class ListingsService {
       mapLink: dto.mapLink?.trim(),
       imageUrl: dto.imageUrl?.trim(),
       price: dto.price,
+      isPremium: dto.isPremium ?? false,
       startDateTime: dto.startDateTime
         ? new Date(dto.startDateTime)
         : undefined,
@@ -66,7 +67,40 @@ export class ListingsService {
   async findOne(id: string) {
     const listing = await this.repo.findOne({ where: { id } });
     if (!listing) throw new NotFoundException('Listing not found');
+    // Increment view count fire-and-forget
+    void this.repo.increment({ id }, 'viewCount', 1);
     return listing;
+  }
+
+  async searchListings(params: {
+    q?: string;
+    category?: string;
+    type?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const { q, category, type, limit = 12, offset = 0 } = params;
+    const qb = this.repo
+      .createQueryBuilder('listing')
+      .where('listing.status = :status', { status: ListingStatus.APPROVED });
+
+    if (q) {
+      qb.andWhere(
+        '(listing.title ILIKE :q OR listing.description ILIKE :q)',
+        { q: `%${q}%` },
+      );
+    }
+    if (category) {
+      qb.andWhere('listing.category = :category', { category });
+    }
+    if (type) {
+      qb.andWhere('listing.type = :type', { type });
+    }
+
+    qb.orderBy('listing.createdAt', 'DESC').skip(offset).take(limit);
+
+    const [listings, total] = await qb.getManyAndCount();
+    return { listings, total };
   }
 
   async update(hostFirebaseUid: string, id: string, dto: UpdateListingDto) {
@@ -87,6 +121,7 @@ export class ListingsService {
     if (dto.lat !== undefined && dto.lng !== undefined && dto.lat !== 0 && dto.lng !== 0) {
       listing.location = { type: 'Point', coordinates: [dto.lng, dto.lat] };
     }
+    if (dto.isPremium !== undefined) listing.isPremium = dto.isPremium;
 
     // Changing content usually returns it to PENDING unless we disable that.
     listing.status = ListingStatus.PENDING;
