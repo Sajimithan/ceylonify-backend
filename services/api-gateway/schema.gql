@@ -101,6 +101,7 @@ type Query {
   myListings: [Listing!]!
   adminReports: [ListingReport!]!
   searchListings(q: String, category: String, type: String, limit: Int, offset: Int, startAfter: String, startBefore: String): SearchResult!
+  nearbyListings(lat: Float!, lng: Float!, radiusKm: Float, limit: Int): [Listing!]!
   relatedListings(listingId: String!, limit: Int): [Listing!]!
   feed: [Listing!]!
   listing(id: String!): Listing!

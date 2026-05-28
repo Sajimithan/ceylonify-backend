@@ -137,6 +137,21 @@ export async function searchListings(params: {
   return res.data as unknown;
 }
 
+export async function nearbyListings(params: {
+  lat: number;
+  lng: number;
+  radiusKm?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  query.set('lat', String(params.lat));
+  query.set('lng', String(params.lng));
+  if (params.radiusKm !== undefined) query.set('radiusKm', String(params.radiusKm));
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
+  const res = await axios.get(`${SERVICES.listing}/listings/nearby?${query.toString()}`);
+  return res.data as unknown;
+}
+
 export async function reportListing(
   uid: string,
   listingId: string,

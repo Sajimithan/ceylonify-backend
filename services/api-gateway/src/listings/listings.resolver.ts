@@ -32,6 +32,7 @@ import {
   adminAllListings,
   adminListingStats,
   searchListings,
+  nearbyListings,
   reportListing,
   adminGetReports,
   adminDismissReport,
@@ -259,6 +260,17 @@ export class ListingsResolver {
     const profile = (await getUser(user.uid)) as { role: string } | null;
     const isPremium = profile?.role === 'HOST' || profile?.role === 'ADMIN';
     return (await searchListings({ q, category, type, limit, offset, includePremium: isPremium, startAfter, startBefore })) as SearchResult;
+  }
+
+  @UseGuards(AuthGuard)
+  @Query(() => [Listing])
+  async nearbyListings(
+    @Args('lat', { type: () => Number }) lat: number,
+    @Args('lng', { type: () => Number }) lng: number,
+    @Args('radiusKm', { nullable: true, type: () => Number }) radiusKm?: number,
+    @Args('limit', { nullable: true, type: () => Int }) limit?: number,
+  ) {
+    return (await nearbyListings({ lat, lng, radiusKm, limit })) as Listing[];
   }
 
   @UseGuards(AuthGuard)

@@ -87,6 +87,26 @@ export class ListingsService {
     return listing;
   }
 
+  async searchNearby(params: {
+    lat: number;
+    lng: number;
+    radiusKm?: number;
+    limit?: number;
+  }) {
+    const { lat, lng, radiusKm = 50, limit = 20 } = params;
+    const rows = await this.repo.query(
+      `SELECT *, ST_Distance(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) AS distance
+       FROM listings
+       WHERE status = 'APPROVED'
+         AND location IS NOT NULL
+         AND ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3 * 1000)
+       ORDER BY distance
+       LIMIT $4`,
+      [lng, lat, radiusKm, limit],
+    );
+    return rows as Listing[];
+  }
+
   async searchListings(params: {
     q?: string;
     category?: string;

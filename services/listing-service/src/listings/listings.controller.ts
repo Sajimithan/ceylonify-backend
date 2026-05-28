@@ -96,6 +96,21 @@ export class ListingsController {
     });
   }
 
+  @Get('nearby')
+  nearby(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('radiusKm') radiusKm?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.listings.searchNearby({
+      lat: parseFloat(lat),
+      lng: parseFloat(lng),
+      radiusKm: radiusKm ? parseFloat(radiusKm) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
   // Get single listing
   @Get(':id')
   findOne(@Param('id') id: string) {
