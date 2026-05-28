@@ -28,6 +28,7 @@ import {
   removeFromItinerary,
 } from '../identity/identity.client';
 import { getListing, addAuditLog } from '../listings/listings.client';
+import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
 import { Listing } from '../listings/listings.resolver';
 
 @ObjectType()
@@ -68,6 +69,12 @@ class ItineraryItem {
   @Field() plannedDate!: string;
   @Field({ nullable: true }) note?: string;
   @Field() createdAt!: string;
+}
+
+@InputType()
+class ChatMessageInput {
+  @Field() role!: string;
+  @Field() content!: string;
 }
 
 @Resolver()
@@ -134,6 +141,22 @@ export class MeResolver {
       // best effort
     }
     return true;
+  }
+
+  // ── AI Planner ───────────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => String)
+  async planItinerary(
+    @Args('prompt') prompt: string,
+    @Args('history', { type: () => [ChatMessageInput], nullable: true, defaultValue: [] })
+    history: ChatMessageInput[],
+  ): Promise<string> {
+    const messages = [
+      ...history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      { role: 'user' as const, content: prompt },
+    ];
+    return aiPlanItinerary(messages);
   }
 
   // ── Itinerary ────────────────────────────────────────────────────────────────

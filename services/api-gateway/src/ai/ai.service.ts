@@ -28,6 +28,39 @@ export async function enhanceDescription(raw: string): Promise<string> {
   }
 }
 
+export async function planItinerary(
+  messages: { role: 'user' | 'assistant'; content: string }[],
+): Promise<string> {
+  const client = getClient();
+  if (!client) return 'AI planner is not configured. Please contact support.';
+  try {
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a Sri Lanka travel expert and trip planner. When given a trip request, return a detailed day-by-day itinerary. Format each day as:
+
+**Day 1 — [Theme]**
+- Morning: ...
+- Afternoon: ...
+- Evening: ...
+- 🍽 Eat at: [restaurant + dish recommendation]
+- 💡 Tip: [insider note]
+
+Include transport suggestions between locations, estimated travel times, and budget notes if relevant. Keep the tone friendly and practical. If the destination is outside Sri Lanka, still help but note you specialize in Sri Lanka.`,
+        },
+        ...messages,
+      ],
+      max_tokens: 2000,
+      temperature: 0.7,
+    });
+    return response.choices[0]?.message?.content?.trim() ?? 'Sorry, I could not generate a plan. Please try again.';
+  } catch {
+    return 'Sorry, the AI planner is unavailable right now. Please try again later.';
+  }
+}
+
 export async function moderateListing(
   title: string,
   description: string,

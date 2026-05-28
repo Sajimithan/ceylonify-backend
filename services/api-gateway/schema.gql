@@ -115,6 +115,7 @@ type Mutation {
   saveListing(listingId: ID!): Boolean!
   unsaveListing(listingId: ID!): Boolean!
   registerDeviceToken(token: String!): Boolean!
+  planItinerary(prompt: String!, history: [ChatMessageInput!] = []): String!
   addToItinerary(listingId: ID!, plannedDate: String!, note: String): ItineraryItem!
   updateItineraryNote(itemId: ID!, note: String!): ItineraryItem!
   removeFromItinerary(itemId: ID!): Boolean!
@@ -128,6 +129,11 @@ type Mutation {
   enhanceDescription(text: String!): String!
   approveListing(id: ID!): Listing!
   rejectListing(id: ID!, reason: String!): Listing!
+}
+
+input ChatMessageInput {
+  role: String!
+  content: String!
 }
 
 input CreateListingInput {
