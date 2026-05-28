@@ -69,6 +69,10 @@ class ItineraryItem {
   @Field() plannedDate!: string;
   @Field({ nullable: true }) note?: string;
   @Field() createdAt!: string;
+  @Field({ nullable: true }) listingTitle?: string;
+  @Field({ nullable: true }) listingImageUrl?: string;
+  @Field({ nullable: true }) listingType?: string;
+  @Field({ nullable: true }) listingPlaceName?: string;
 }
 
 @InputType()
@@ -164,7 +168,23 @@ export class MeResolver {
   @UseGuards(AuthGuard)
   @Query(() => [ItineraryItem])
   async myItinerary(@CurrentUser() user: admin.auth.DecodedIdToken) {
-    return (await getItinerary(user.uid)) as ItineraryItem[];
+    const items = (await getItinerary(user.uid)) as any[];
+    return Promise.all(
+      items.map(async (item) => {
+        try {
+          const listing = (await getListing(item.listingId)) as any;
+          return {
+            ...item,
+            listingTitle: listing?.title ?? null,
+            listingImageUrl: listing?.imageUrl ?? null,
+            listingType: listing?.type ?? null,
+            listingPlaceName: listing?.placeName ?? null,
+          };
+        } catch {
+          return { ...item, listingTitle: null, listingImageUrl: null, listingType: null, listingPlaceName: null };
+        }
+      }),
+    );
   }
 
   @UseGuards(AuthGuard)

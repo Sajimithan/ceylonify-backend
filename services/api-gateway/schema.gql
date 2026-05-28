@@ -89,6 +89,10 @@ type ItineraryItem {
   plannedDate: String!
   note: String
   createdAt: String!
+  listingTitle: String
+  listingImageUrl: String
+  listingType: String
+  listingPlaceName: String
 }
 
 type Query {
