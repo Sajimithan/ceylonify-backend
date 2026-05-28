@@ -99,4 +99,75 @@ export class UsersController {
     });
     return { ok: true };
   }
+
+  // ── FCM Token ─────────────────────────────────────────────────────────────
+
+  @Patch(':firebaseUid/fcm-token')
+  async updateFcmToken(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { fcmToken: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: { fcmToken: body.fcmToken },
+      select: { id: true, fcmToken: true },
+    });
+  }
+
+  @Get(':firebaseUid/fcm-token')
+  async getFcmToken(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { firebaseUid },
+      select: { fcmToken: true },
+    });
+    return { fcmToken: user?.fcmToken ?? null };
+  }
+
+  // ── Itinerary ─────────────────────────────────────────────────────────────
+
+  @Get(':firebaseUid/itinerary')
+  async getItinerary(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) return [];
+    return this.prisma.itineraryItem.findMany({
+      where: { userId: user.id },
+      orderBy: { plannedDate: 'asc' },
+    });
+  }
+
+  @Post(':firebaseUid/itinerary')
+  async addToItinerary(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { listingId: string; plannedDate: string; note?: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.itineraryItem.create({
+      data: {
+        userId: user.id,
+        listingId: body.listingId,
+        plannedDate: new Date(body.plannedDate),
+        note: body.note,
+      },
+    });
+  }
+
+  @Patch('itinerary/:itemId/note')
+  async updateItineraryNote(
+    @Param('itemId') itemId: string,
+    @Body() body: { note: string },
+  ) {
+    return this.prisma.itineraryItem.update({
+      where: { id: itemId },
+      data: { note: body.note },
+    });
+  }
+
+  @Delete('itinerary/:itemId')
+  async removeFromItinerary(@Param('itemId') itemId: string) {
+    await this.prisma.itineraryItem.delete({ where: { id: itemId } });
+    return { ok: true };
+  }
 }

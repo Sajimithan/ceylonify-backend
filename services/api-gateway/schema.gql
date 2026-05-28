@@ -42,6 +42,25 @@ type SearchResult {
   total: Int!
 }
 
+type ListingReport {
+  id: ID!
+  listingId: String!
+  reporterFirebaseUid: String!
+  reason: String!
+  comment: String
+  status: String!
+  createdAt: String!
+}
+
+type AuditLogEntry {
+  id: ID!
+  action: String!
+  adminFirebaseUid: String!
+  resourceId: String
+  details: String
+  createdAt: String!
+}
+
 type Me {
   firebaseUid: String!
   email: String
@@ -64,34 +83,51 @@ type UserStats {
   admins: Float!
 }
 
+type ItineraryItem {
+  id: ID!
+  listingId: String!
+  plannedDate: String!
+  note: String
+  createdAt: String!
+}
+
 type Query {
   ping: String!
   me: Me!
   savedListings: [Listing!]!
+  myItinerary: [ItineraryItem!]!
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
   myListings: [Listing!]!
-  searchListings(q: String, category: String, type: String, limit: Int, offset: Int): SearchResult!
+  adminReports: [ListingReport!]!
+  searchListings(q: String, category: String, type: String, limit: Int, offset: Int, startAfter: String, startBefore: String): SearchResult!
   relatedListings(listingId: String!, limit: Int): [Listing!]!
   feed: [Listing!]!
   listing(id: String!): Listing!
   adminAllListings: [Listing!]!
   adminListingStats: ListingStats!
   pendingListings: [Listing!]!
+  adminAuditLogs: [AuditLogEntry!]!
   healthAll: [ServiceHealth!]!
 }
 
 type Mutation {
   saveListing(listingId: ID!): Boolean!
   unsaveListing(listingId: ID!): Boolean!
+  registerDeviceToken(token: String!): Boolean!
+  addToItinerary(listingId: ID!, plannedDate: String!, note: String): ItineraryItem!
+  updateItineraryNote(itemId: ID!, note: String!): ItineraryItem!
+  removeFromItinerary(itemId: ID!): Boolean!
   adminChangeUserRole(id: String!, role: String!): UserRecord!
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
   deleteListing(id: String!): Listing!
+  reportListing(listingId: ID!, reason: String!, comment: String): Boolean!
+  adminDismissReport(reportId: ID!): Boolean!
+  adminActionReport(reportId: ID!): Boolean!
   enhanceDescription(text: String!): String!
   approveListing(id: ID!): Listing!
   rejectListing(id: ID!, reason: String!): Listing!
-  registerDeviceToken(token: String!): Boolean!
 }
 
 input CreateListingInput {

@@ -17,6 +17,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { enhanceDescription, moderateListing } from '../ai/ai.service';
+import { getUser } from '../identity/identity.client';
 
 import {
   createListing,
@@ -31,6 +32,11 @@ import {
   adminAllListings,
   adminListingStats,
   searchListings,
+  reportListing,
+  adminGetReports,
+  adminDismissReport,
+  adminActionReport,
+  adminGetAuditLogs,
 } from './listings.client';
 
 // ── ObjectTypes ──────────────────────────────────────────────────────────────
@@ -73,6 +79,27 @@ export class ListingStats {
 class SearchResult {
   @Field(() => [Listing]) listings!: Listing[];
   @Field(() => Int) total!: number;
+}
+
+@ObjectType()
+class ListingReport {
+  @Field(() => ID) id!: string;
+  @Field() listingId!: string;
+  @Field() reporterFirebaseUid!: string;
+  @Field() reason!: string;
+  @Field({ nullable: true }) comment?: string;
+  @Field() status!: string;
+  @Field() createdAt!: string;
+}
+
+@ObjectType()
+class AuditLogEntry {
+  @Field(() => ID) id!: string;
+  @Field() action!: string;
+  @Field() adminFirebaseUid!: string;
+  @Field({ nullable: true }) resourceId?: string;
+  @Field({ nullable: true }) details?: string;
+  @Field() createdAt!: string;
 }
 
 // ── InputTypes ───────────────────────────────────────────────────────────────
@@ -173,6 +200,40 @@ export class ListingsResolver {
     return (await myListings(user.uid)) as Listing[];
   }
 
+  // ── Reports ───────────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async reportListing(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('listingId', { type: () => ID }) listingId: string,
+    @Args('reason') reason: string,
+    @Args('comment', { nullable: true }) comment?: string,
+  ) {
+    await reportListing(user.uid, listingId, reason, comment);
+    return true;
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => [ListingReport])
+  async adminReports() {
+    return (await adminGetReports()) as ListingReport[];
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminDismissReport(@Args('reportId', { type: () => ID }) reportId: string) {
+    await adminDismissReport(reportId);
+    return true;
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminActionReport(@Args('reportId', { type: () => ID }) reportId: string) {
+    await adminActionReport(reportId);
+    return true;
+  }
+
   // ── AI ────────────────────────────────────────────────────────────────────
 
   @UseGuards(AuthGuard)
@@ -186,13 +247,18 @@ export class ListingsResolver {
   @UseGuards(AuthGuard)
   @Query(() => SearchResult)
   async searchListings(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
     @Args('q', { nullable: true }) q?: string,
     @Args('category', { nullable: true }) category?: string,
     @Args('type', { nullable: true }) type?: string,
     @Args('limit', { nullable: true, type: () => Int }) limit?: number,
     @Args('offset', { nullable: true, type: () => Int }) offset?: number,
+    @Args('startAfter', { nullable: true }) startAfter?: string,
+    @Args('startBefore', { nullable: true }) startBefore?: string,
   ) {
-    return (await searchListings({ q, category, type, limit, offset })) as SearchResult;
+    const profile = (await getUser(user.uid)) as { role: string } | null;
+    const isPremium = profile?.role === 'HOST' || profile?.role === 'ADMIN';
+    return (await searchListings({ q, category, type, limit, offset, includePremium: isPremium, startAfter, startBefore })) as SearchResult;
   }
 
   @UseGuards(AuthGuard)
@@ -244,19 +310,29 @@ export class ListingsResolver {
     return (await pendingListings()) as Listing[];
   }
 
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, AdminGuard)
   @Mutation(() => Listing)
-  async approveListing(@Args('id', { type: () => ID }) id: string) {
-    return (await approveListing(id)) as Listing;
+  async approveListing(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('id', { type: () => ID }) id: string,
+  ) {
+    return (await approveListing(id, user.uid)) as Listing;
   }
 
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, AdminGuard)
   @Mutation(() => Listing)
   async rejectListing(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
     @Args('id', { type: () => ID }) id: string,
     @Args('reason') reason: string,
   ) {
-    return (await rejectListing(id, reason)) as Listing;
+    return (await rejectListing(id, reason, user.uid)) as Listing;
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => [AuditLogEntry])
+  async adminAuditLogs() {
+    return (await adminGetAuditLogs()) as AuditLogEntry[];
   }
 
   // ── Field resolvers ───────────────────────────────────────────────────────

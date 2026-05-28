@@ -14,13 +14,15 @@ enum Role {
 }
 
 model User {
-  id            String         @id @default(uuid())
-  firebaseUid   String         @unique
-  email         String?
-  role          Role           @default(TRAVELER)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  savedListings SavedListing[]
+  id              String          @id @default(uuid())
+  firebaseUid     String          @unique
+  email           String?
+  role            Role            @default(TRAVELER)
+  fcmToken        String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  savedListings   SavedListing[]
+  itineraryItems  ItineraryItem[]
 }
 
 model SavedListing {
@@ -31,4 +33,14 @@ model SavedListing {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, listingId])
+}
+
+model ItineraryItem {
+  id          String   @id @default(uuid())
+  userId      String
+  listingId   String
+  plannedDate DateTime
+  note        String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

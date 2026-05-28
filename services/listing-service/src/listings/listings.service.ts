@@ -3,12 +3,27 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import { Listing, ListingStatus } from './listing.entity';
+import { Report, ReportStatus } from './report.entity';
+import { AuditLog } from './audit-log.entity';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 
 @Injectable()
 export class ListingsService {
-  constructor(@InjectRepository(Listing) private repo: Repository<Listing>) {}
+  constructor(
+    @InjectRepository(Listing) private repo: Repository<Listing>,
+    @InjectRepository(Report) private reportRepo: Repository<Report>,
+    @InjectRepository(AuditLog) private auditRepo: Repository<AuditLog>,
+  ) {}
+
+  async addAuditLog(action: string, adminFirebaseUid: string, resourceId?: string, details?: string) {
+    const log = this.auditRepo.create({ action, adminFirebaseUid, resourceId, details });
+    await this.auditRepo.save(log);
+  }
+
+  async adminGetAuditLogs() {
+    return this.auditRepo.find({ order: { createdAt: 'DESC' }, take: 200 });
+  }
 
   private get notificationServiceUrl() {
     // Use env in docker/local; fallback to localhost for dev
@@ -78,11 +93,18 @@ export class ListingsService {
     type?: string;
     limit?: number;
     offset?: number;
+    includePremium?: boolean;
+    startAfter?: string;
+    startBefore?: string;
   }) {
-    const { q, category, type, limit = 12, offset = 0 } = params;
+    const { q, category, type, limit = 12, offset = 0, includePremium = true, startAfter, startBefore } = params;
     const qb = this.repo
       .createQueryBuilder('listing')
       .where('listing.status = :status', { status: ListingStatus.APPROVED });
+
+    if (!includePremium) {
+      qb.andWhere('listing.isPremium = :isPremium', { isPremium: false });
+    }
 
     if (q) {
       qb.andWhere(
@@ -95,6 +117,12 @@ export class ListingsService {
     }
     if (type) {
       qb.andWhere('listing.type = :type', { type });
+    }
+    if (startAfter) {
+      qb.andWhere('listing.startDateTime >= :startAfter', { startAfter: new Date(startAfter) });
+    }
+    if (startBefore) {
+      qb.andWhere('listing.startDateTime <= :startBefore', { startBefore: new Date(startBefore) });
     }
 
     qb.orderBy('listing.createdAt', 'DESC').skip(offset).take(limit);
@@ -167,7 +195,7 @@ export class ListingsService {
   }
 
 
-  async approve(id: string) {
+  async approve(id: string, adminUid = 'system') {
     const listing = await this.repo.findOne({ where: { id } });
     if (!listing) throw new NotFoundException('Listing not found');
 
@@ -176,7 +204,7 @@ export class ListingsService {
 
     const saved = await this.repo.save(listing);
 
-    // ✅ Notify host
+    void this.addAuditLog('APPROVE_LISTING', adminUid, id, `Approved: "${saved.title}"`);
     void this.safeNotify(
       saved.hostFirebaseUid,
       'Listing approved ✅',
@@ -186,7 +214,7 @@ export class ListingsService {
     return saved;
   }
 
-  async reject(id: string, reason: string) {
+  async reject(id: string, reason: string, adminUid = 'system') {
     const listing = await this.repo.findOne({ where: { id } });
     if (!listing) throw new NotFoundException('Listing not found');
 
@@ -195,7 +223,7 @@ export class ListingsService {
 
     const saved = await this.repo.save(listing);
 
-    // ✅ Notify host
+    void this.addAuditLog('REJECT_LISTING', adminUid, id, `Rejected: "${saved.title}" — ${reason}`);
     void this.safeNotify(
       saved.hostFirebaseUid,
       'Listing rejected ❌',
@@ -203,5 +231,42 @@ export class ListingsService {
     );
 
     return saved;
+  }
+
+  async reportListing(
+    reporterFirebaseUid: string,
+    listingId: string,
+    reason: string,
+    comment?: string,
+  ) {
+    const listing = await this.repo.findOne({ where: { id: listingId } });
+    if (!listing) throw new NotFoundException('Listing not found');
+
+    const report = this.reportRepo.create({
+      listingId,
+      reporterFirebaseUid,
+      reason,
+      comment,
+      status: ReportStatus.PENDING,
+    });
+    return this.reportRepo.save(report);
+  }
+
+  async adminGetReports() {
+    return this.reportRepo.find({ order: { createdAt: 'DESC' } });
+  }
+
+  async adminDismissReport(id: string) {
+    const report = await this.reportRepo.findOne({ where: { id } });
+    if (!report) throw new NotFoundException('Report not found');
+    report.status = ReportStatus.DISMISSED;
+    return this.reportRepo.save(report);
+  }
+
+  async adminActionReport(id: string) {
+    const report = await this.reportRepo.findOne({ where: { id } });
+    if (!report) throw new NotFoundException('Report not found');
+    report.status = ReportStatus.ACTIONED;
+    return this.reportRepo.save(report);
   }
 }

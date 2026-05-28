@@ -58,3 +58,27 @@ export async function removeSavedListing(
   );
   return res.data as unknown;
 }
+
+// ── Itinerary ────────────────────────────────────────────────────────────────
+
+export async function getItinerary(firebaseUid: string) {
+  const res = await axios.get(`${SERVICES.identity}/users/${firebaseUid}/itinerary`);
+  return res.data as unknown;
+}
+
+export async function addToItinerary(firebaseUid: string, listingId: string, plannedDate: string, note?: string) {
+  const res = await axios.post(`${SERVICES.identity}/users/${firebaseUid}/itinerary`, {
+    listingId, plannedDate, note,
+  });
+  return res.data as unknown;
+}
+
+export async function updateItineraryNote(itemId: string, note: string) {
+  const res = await axios.patch(`${SERVICES.identity}/users/itinerary/${itemId}/note`, { note });
+  return res.data as unknown;
+}
+
+export async function removeFromItinerary(itemId: string) {
+  const res = await axios.delete(`${SERVICES.identity}/users/itinerary/${itemId}`);
+  return res.data as unknown;
+}

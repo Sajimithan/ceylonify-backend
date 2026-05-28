@@ -19,11 +19,12 @@ export async function pendingListings() {
   }
 }
 
-export async function approveListing(id: string) {
+export async function approveListing(id: string, adminUid?: string) {
   try {
     const res = await axios.patch(
       `${SERVICES.listing}/listings/${id}/approve`,
       {},
+      adminUid ? { headers: { 'x-admin-uid': adminUid } } : {},
     );
     return res.data as unknown;
   } catch (e) {
@@ -31,11 +32,32 @@ export async function approveListing(id: string) {
   }
 }
 
-export async function rejectListing(id: string, reason: string) {
+export async function rejectListing(id: string, reason: string, adminUid?: string) {
   try {
-    const res = await axios.patch(`${SERVICES.listing}/listings/${id}/reject`, {
-      reason,
+    const res = await axios.patch(
+      `${SERVICES.listing}/listings/${id}/reject`,
+      { reason },
+      adminUid ? { headers: { 'x-admin-uid': adminUid } } : {},
+    );
+    return res.data as unknown;
+  } catch (e) {
+    throw new Error(toMessage(e));
+  }
+}
+
+export async function addAuditLog(action: string, adminFirebaseUid: string, resourceId?: string, details?: string) {
+  try {
+    await axios.post(`${SERVICES.listing}/listings/audit`, {
+      action, adminFirebaseUid, resourceId, details,
     });
+  } catch {
+    // best effort
+  }
+}
+
+export async function adminGetAuditLogs() {
+  try {
+    const res = await axios.get(`${SERVICES.listing}/listings/audit/all`);
     return res.data as unknown;
   } catch (e) {
     throw new Error(toMessage(e));
@@ -96,6 +118,9 @@ export async function searchListings(params: {
   type?: string;
   limit?: number;
   offset?: number;
+  includePremium?: boolean;
+  startAfter?: string;
+  startBefore?: string;
 }) {
   const query = new URLSearchParams();
   if (params.q) query.set('q', params.q);
@@ -103,8 +128,62 @@ export async function searchListings(params: {
   if (params.type) query.set('type', params.type);
   if (params.limit !== undefined) query.set('limit', String(params.limit));
   if (params.offset !== undefined) query.set('offset', String(params.offset));
+  if (params.includePremium === false) query.set('includePremium', 'false');
+  if (params.startAfter) query.set('startAfter', params.startAfter);
+  if (params.startBefore) query.set('startBefore', params.startBefore);
   const res = await axios.get(
     `${SERVICES.listing}/listings/search?${query.toString()}`,
   );
   return res.data as unknown;
+}
+
+export async function reportListing(
+  uid: string,
+  listingId: string,
+  reason: string,
+  comment?: string,
+) {
+  try {
+    const res = await axios.post(
+      `${SERVICES.listing}/listings/${listingId}/report`,
+      { reason, comment },
+      { headers: { 'x-user-uid': uid } },
+    );
+    return res.data as unknown;
+  } catch (e) {
+    throw new Error(toMessage(e));
+  }
+}
+
+export async function adminGetReports() {
+  try {
+    const res = await axios.get(`${SERVICES.listing}/listings/reports/all`);
+    return res.data as unknown;
+  } catch (e) {
+    throw new Error(toMessage(e));
+  }
+}
+
+export async function adminDismissReport(reportId: string) {
+  try {
+    const res = await axios.patch(
+      `${SERVICES.listing}/listings/reports/${reportId}/dismiss`,
+      {},
+    );
+    return res.data as unknown;
+  } catch (e) {
+    throw new Error(toMessage(e));
+  }
+}
+
+export async function adminActionReport(reportId: string) {
+  try {
+    const res = await axios.patch(
+      `${SERVICES.listing}/listings/reports/${reportId}/action`,
+      {},
+    );
+    return res.data as unknown;
+  } catch (e) {
+    throw new Error(toMessage(e));
+  }
 }

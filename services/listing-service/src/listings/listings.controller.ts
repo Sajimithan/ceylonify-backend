@@ -80,6 +80,9 @@ export class ListingsController {
     @Query('type') type?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @Query('includePremium') includePremium?: string,
+    @Query('startAfter') startAfter?: string,
+    @Query('startBefore') startBefore?: string,
   ) {
     return this.listings.searchListings({
       q,
@@ -87,6 +90,9 @@ export class ListingsController {
       type,
       limit: limit ? parseInt(limit, 10) : 12,
       offset: offset ? parseInt(offset, 10) : 0,
+      includePremium: includePremium !== 'false',
+      startAfter,
+      startBefore,
     });
   }
 
@@ -98,14 +104,58 @@ export class ListingsController {
 
   // Admin: approve
   @Patch(':id/approve')
-  approve(@Param('id') id: string) {
-    return this.listings.approve(id);
+  approve(@Param('id') id: string, @Headers('x-admin-uid') adminUid?: string) {
+    return this.listings.approve(id, adminUid ?? 'system');
   }
 
   // Admin: reject
   @Patch(':id/reject')
-  reject(@Param('id') id: string, @Body() body: { reason?: string }) {
+  reject(
+    @Param('id') id: string,
+    @Headers('x-admin-uid') adminUid: string | undefined,
+    @Body() body: { reason?: string },
+  ) {
     const reason = (body?.reason ?? '').trim();
-    return this.listings.reject(id, reason || 'No reason provided');
+    return this.listings.reject(id, reason || 'No reason provided', adminUid ?? 'system');
+  }
+
+  // Admin: get audit logs
+  @Get('audit/all')
+  adminGetAuditLogs() {
+    return this.listings.adminGetAuditLogs();
+  }
+
+  // Admin: write audit entry (called from gateway for non-listing events)
+  @Post('audit')
+  addAuditLog(@Body() body: { action: string; adminFirebaseUid: string; resourceId?: string; details?: string }) {
+    return this.listings.addAuditLog(body.action, body.adminFirebaseUid, body.resourceId, body.details);
+  }
+
+  // Traveler: report a listing
+  @Post(':id/report')
+  reportListing(
+    @Param('id') id: string,
+    @Headers('x-user-uid') uid: string,
+    @Body() body: { reason: string; comment?: string },
+  ) {
+    return this.listings.reportListing(uid, id, body.reason, body.comment);
+  }
+
+  // Admin: get all reports
+  @Get('reports/all')
+  adminGetReports() {
+    return this.listings.adminGetReports();
+  }
+
+  // Admin: dismiss report
+  @Patch('reports/:reportId/dismiss')
+  adminDismissReport(@Param('reportId') reportId: string) {
+    return this.listings.adminDismissReport(reportId);
+  }
+
+  // Admin: action report (remove the listing)
+  @Patch('reports/:reportId/action')
+  adminActionReport(@Param('reportId') reportId: string) {
+    return this.listings.adminActionReport(reportId);
   }
 }
