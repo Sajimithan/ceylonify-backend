@@ -26,6 +26,11 @@ import {
   addToItinerary,
   updateItineraryNote,
   removeFromItinerary,
+  updateUserProfile,
+  createNotification,
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
 } from '../identity/identity.client';
 import { getListing, addAuditLog } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
@@ -37,6 +42,18 @@ class Me {
   @Field({ nullable: true }) email?: string;
   @Field() role!: string;
   @Field() isPremium!: boolean;
+  @Field({ nullable: true }) displayName?: string;
+  @Field({ nullable: true }) avatarUrl?: string;
+}
+
+@ObjectType()
+class AppNotification {
+  @Field(() => ID) id!: string;
+  @Field() title!: string;
+  @Field() body!: string;
+  @Field() type!: string;
+  @Field() read!: boolean;
+  @Field() createdAt!: string;
 }
 
 @ObjectType()
@@ -87,12 +104,33 @@ export class MeResolver {
   @Query(() => Me)
   async me(@CurrentUser() user: admin.auth.DecodedIdToken) {
     await upsertUser(user.uid, user.email);
-    const profile = (await getUser(user.uid)) as UserProfile;
+    const profile = (await getUser(user.uid)) as UserProfile & { displayName?: string; avatarUrl?: string };
     return {
       firebaseUid: profile.firebaseUid,
       email: profile.email ?? null,
       role: profile.role,
       isPremium: profile.role === 'HOST' || profile.role === 'ADMIN',
+      displayName: profile.displayName ?? null,
+      avatarUrl: profile.avatarUrl ?? null,
+    };
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Me)
+  async updateProfile(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('displayName', { nullable: true }) displayName?: string,
+    @Args('avatarUrl', { nullable: true }) avatarUrl?: string,
+  ) {
+    await updateUserProfile(user.uid, { displayName, avatarUrl });
+    const profile = (await getUser(user.uid)) as UserProfile & { displayName?: string; avatarUrl?: string };
+    return {
+      firebaseUid: profile.firebaseUid,
+      email: profile.email ?? null,
+      role: profile.role,
+      isPremium: profile.role === 'HOST' || profile.role === 'ADMIN',
+      displayName: profile.displayName ?? null,
+      avatarUrl: profile.avatarUrl ?? null,
     };
   }
 
@@ -116,6 +154,10 @@ export class MeResolver {
     @Args('listingId', { type: () => ID }) listingId: string,
   ) {
     await addSavedListing(user.uid, listingId);
+    // Trigger in-app notification (best effort)
+    void getListing(listingId).then((l: any) => {
+      createNotification(user.uid, '❤️ Listing Saved', `"${l?.title ?? 'A listing'}" was added to your saved list.`, 'SAVE');
+    }).catch(() => {});
     return true;
   }
 
@@ -126,6 +168,31 @@ export class MeResolver {
     @Args('listingId', { type: () => ID }) listingId: string,
   ) {
     await removeSavedListing(user.uid, listingId);
+    return true;
+  }
+
+  // ── Notifications ────────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Query(() => [AppNotification])
+  async myNotifications(@CurrentUser() user: admin.auth.DecodedIdToken) {
+    return (await getNotifications(user.uid)) as AppNotification[];
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async markNotificationRead(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('notificationId', { type: () => ID }) notificationId: string,
+  ) {
+    await markNotificationRead(user.uid, notificationId);
+    return true;
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async markAllNotificationsRead(@CurrentUser() user: admin.auth.DecodedIdToken) {
+    await markAllNotificationsRead(user.uid);
     return true;
   }
 
@@ -195,7 +262,13 @@ export class MeResolver {
     @Args('plannedDate') plannedDate: string,
     @Args('note', { nullable: true }) note?: string,
   ) {
-    return (await addToItinerary(user.uid, listingId, plannedDate, note)) as ItineraryItem;
+    const item = (await addToItinerary(user.uid, listingId, plannedDate, note)) as ItineraryItem;
+    // Trigger in-app notification (best effort)
+    void getListing(listingId).then((l: any) => {
+      const dateStr = new Date(plannedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      createNotification(user.uid, '📅 Added to Itinerary', `"${l?.title ?? 'A listing'}" added to your plan for ${dateStr}.`, 'ITINERARY');
+    }).catch(() => {});
+    return item;
   }
 
   @UseGuards(AuthGuard)

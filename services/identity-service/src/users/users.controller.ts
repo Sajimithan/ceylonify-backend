@@ -7,13 +7,47 @@ import {
   Param,
   Delete,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Role } from '@prisma/client';
 
 @Controller('users')
-export class UsersController {
+export class UsersController implements OnModuleInit {
   constructor(private prisma: PrismaService) {}
+
+  onModuleInit() {
+    // Day-before event reminder — runs every hour, fires at 9 AM UTC
+    setInterval(() => this.sendDayBeforeReminders(), 60 * 60 * 1000);
+    // Also run once on startup (catches missed runs during restarts)
+    this.sendDayBeforeReminders();
+  }
+
+  private async sendDayBeforeReminders() {
+    const now = new Date();
+    if (now.getUTCHours() !== 9) return; // only at 9 AM UTC
+
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const tomorrowStart = new Date(Date.UTC(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth(), tomorrow.getUTCDate(), 0, 0, 0));
+    const tomorrowEnd   = new Date(Date.UTC(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth(), tomorrow.getUTCDate(), 23, 59, 59));
+
+    const items = await this.prisma.itineraryItem.findMany({
+      where: { plannedDate: { gte: tomorrowStart, lte: tomorrowEnd } },
+      include: { user: true },
+    });
+
+    for (const item of items) {
+      await this.prisma.notification.create({
+        data: {
+          userId: item.userId,
+          title: '📅 Reminder: Tomorrow\'s Plan',
+          body: `You have an experience planned for tomorrow. Have a great trip!`,
+          type: 'REMINDER',
+        },
+      });
+    }
+  }
 
   @Post('upsert-from-firebase')
   async upsertFromFirebase(
@@ -168,6 +202,67 @@ export class UsersController {
   @Delete('itinerary/:itemId')
   async removeFromItinerary(@Param('itemId') itemId: string) {
     await this.prisma.itineraryItem.delete({ where: { id: itemId } });
+    return { ok: true };
+  }
+
+  // ── Profile ───────────────────────────────────────────────────────────────
+
+  @Patch(':firebaseUid/profile')
+  async updateProfile(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { displayName?: string; avatarUrl?: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        ...(body.displayName !== undefined ? { displayName: body.displayName } : {}),
+        ...(body.avatarUrl !== undefined ? { avatarUrl: body.avatarUrl } : {}),
+      },
+      select: { id: true, displayName: true, avatarUrl: true },
+    });
+  }
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+
+  @Post(':firebaseUid/notifications')
+  async createNotification(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { title: string; body: string; type: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.notification.create({
+      data: { userId: user.id, title: body.title, body: body.body, type: body.type },
+    });
+  }
+
+  @Get(':firebaseUid/notifications')
+  async getNotifications(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) return [];
+    return this.prisma.notification.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  @Patch(':firebaseUid/notifications/:id/read')
+  async markNotificationRead(
+    @Param('firebaseUid') firebaseUid: string,
+    @Param('id') id: string,
+  ) {
+    await this.prisma.notification.updateMany({ where: { id }, data: { read: true } });
+    return { ok: true };
+  }
+
+  @Patch(':firebaseUid/notifications/read-all')
+  async markAllNotificationsRead(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) return { ok: true };
+    await this.prisma.notification.updateMany({ where: { userId: user.id }, data: { read: true } });
     return { ok: true };
   }
 }

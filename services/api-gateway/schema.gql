@@ -66,6 +66,17 @@ type Me {
   email: String
   role: String!
   isPremium: Boolean!
+  displayName: String
+  avatarUrl: String
+}
+
+type AppNotification {
+  id: ID!
+  title: String!
+  body: String!
+  type: String!
+  read: Boolean!
+  createdAt: String!
 }
 
 type UserRecord {
@@ -99,6 +110,7 @@ type Query {
   ping: String!
   me: Me!
   savedListings: [Listing!]!
+  myNotifications: [AppNotification!]!
   myItinerary: [ItineraryItem!]!
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
@@ -117,8 +129,11 @@ type Query {
 }
 
 type Mutation {
+  updateProfile(displayName: String, avatarUrl: String): Me!
   saveListing(listingId: ID!): Boolean!
   unsaveListing(listingId: ID!): Boolean!
+  markNotificationRead(notificationId: ID!): Boolean!
+  markAllNotificationsRead: Boolean!
   registerDeviceToken(token: String!): Boolean!
   planItinerary(prompt: String!, history: [ChatMessageInput!] = []): String!
   addToItinerary(listingId: ID!, plannedDate: String!, note: String): ItineraryItem!

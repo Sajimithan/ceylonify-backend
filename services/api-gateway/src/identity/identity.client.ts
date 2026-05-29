@@ -82,3 +82,43 @@ export async function removeFromItinerary(itemId: string) {
   const res = await axios.delete(`${SERVICES.identity}/users/itinerary/${itemId}`);
   return res.data as unknown;
 }
+
+// ── Profile ──────────────────────────────────────────────────────────────────
+
+export async function updateUserProfile(
+  firebaseUid: string,
+  fields: { displayName?: string; avatarUrl?: string },
+) {
+  const res = await axios.patch(`${SERVICES.identity}/users/${firebaseUid}/profile`, fields);
+  return res.data as unknown;
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export async function createNotification(
+  firebaseUid: string,
+  title: string,
+  body: string,
+  type: string,
+) {
+  try {
+    await axios.post(`${SERVICES.identity}/users/${firebaseUid}/notifications`, { title, body, type });
+  } catch {
+    // best effort — never block the main action
+  }
+}
+
+export async function getNotifications(firebaseUid: string) {
+  const res = await axios.get(`${SERVICES.identity}/users/${firebaseUid}/notifications`);
+  return res.data as unknown;
+}
+
+export async function markNotificationRead(firebaseUid: string, notificationId: string) {
+  const res = await axios.patch(`${SERVICES.identity}/users/${firebaseUid}/notifications/${notificationId}/read`);
+  return res.data as unknown;
+}
+
+export async function markAllNotificationsRead(firebaseUid: string) {
+  const res = await axios.patch(`${SERVICES.identity}/users/${firebaseUid}/notifications/read-all`);
+  return res.data as unknown;
+}
