@@ -265,4 +265,41 @@ export class UsersController implements OnModuleInit {
     await this.prisma.notification.updateMany({ where: { userId: user.id }, data: { read: true } });
     return { ok: true };
   }
+
+  // ── Saved Chats ───────────────────────────────────────────────────────────
+
+  @Post(':firebaseUid/chats')
+  async saveChat(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { name: string; messages: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.savedChat.create({
+      data: { userId: user.id, name: body.name, messages: body.messages },
+      select: { id: true, name: true, messages: true, createdAt: true, updatedAt: true },
+    });
+  }
+
+  @Get(':firebaseUid/chats')
+  async getSavedChats(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) return [];
+    return this.prisma.savedChat.findMany({
+      where: { userId: user.id },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, name: true, createdAt: true, updatedAt: true, messages: true },
+    });
+  }
+
+  @Delete(':firebaseUid/chats/:chatId')
+  async deleteSavedChat(
+    @Param('firebaseUid') firebaseUid: string,
+    @Param('chatId') chatId: string,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) return { ok: true };
+    await this.prisma.savedChat.deleteMany({ where: { id: chatId, userId: user.id } });
+    return { ok: true };
+  }
 }

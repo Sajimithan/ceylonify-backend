@@ -122,3 +122,20 @@ export async function markAllNotificationsRead(firebaseUid: string) {
   const res = await axios.patch(`${SERVICES.identity}/users/${firebaseUid}/notifications/read-all`);
   return res.data as unknown;
 }
+
+// ── Saved Chats ───────────────────────────────────────────────────────────────
+
+export async function saveChat(firebaseUid: string, name: string, messages: string) {
+  const res = await axios.post(`${SERVICES.identity}/users/${firebaseUid}/chats`, { name, messages });
+  return res.data as unknown;
+}
+
+export async function getSavedChats(firebaseUid: string) {
+  const res = await axios.get(`${SERVICES.identity}/users/${firebaseUid}/chats`);
+  return res.data as unknown;
+}
+
+export async function deleteSavedChat(firebaseUid: string, chatId: string) {
+  const res = await axios.delete(`${SERVICES.identity}/users/${firebaseUid}/chats/${chatId}`);
+  return res.data as unknown;
+}

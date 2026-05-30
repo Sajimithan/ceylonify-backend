@@ -79,6 +79,14 @@ type AppNotification {
   createdAt: String!
 }
 
+type SavedChat {
+  id: ID!
+  name: String!
+  messages: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
 type UserRecord {
   id: String!
   firebaseUid: String!
@@ -111,6 +119,7 @@ type Query {
   me: Me!
   savedListings: [Listing!]!
   myNotifications: [AppNotification!]!
+  savedChats: [SavedChat!]!
   myItinerary: [ItineraryItem!]!
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
@@ -134,8 +143,10 @@ type Mutation {
   unsaveListing(listingId: ID!): Boolean!
   markNotificationRead(notificationId: ID!): Boolean!
   markAllNotificationsRead: Boolean!
+  saveChat(name: String!, messages: String!): SavedChat!
+  deleteSavedChat(chatId: ID!): Boolean!
   registerDeviceToken(token: String!): Boolean!
-  planItinerary(prompt: String!, history: [ChatMessageInput!] = []): String!
+  planItinerary(prompt: String!, history: [ChatMessageInput!] = [], listingId: String): String!
   addToItinerary(listingId: ID!, plannedDate: String!, note: String): ItineraryItem!
   updateItineraryNote(itemId: ID!, note: String!): ItineraryItem!
   removeFromItinerary(itemId: ID!): Boolean!

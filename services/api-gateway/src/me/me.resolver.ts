@@ -31,8 +31,11 @@ import {
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  saveChat,
+  getSavedChats,
+  deleteSavedChat,
 } from '../identity/identity.client';
-import { getListing, addAuditLog } from '../listings/listings.client';
+import { getListing, addAuditLog, searchListings } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
 import { Listing } from '../listings/listings.resolver';
 
@@ -54,6 +57,15 @@ class AppNotification {
   @Field() type!: string;
   @Field() read!: boolean;
   @Field() createdAt!: string;
+}
+
+@ObjectType()
+class SavedChat {
+  @Field(() => ID) id!: string;
+  @Field() name!: string;
+  @Field() messages!: string;
+  @Field() createdAt!: string;
+  @Field() updatedAt!: string;
 }
 
 @ObjectType()
@@ -196,6 +208,34 @@ export class MeResolver {
     return true;
   }
 
+  // ── Saved Chats ────────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Query(() => [SavedChat])
+  async savedChats(@CurrentUser() user: admin.auth.DecodedIdToken) {
+    return (await getSavedChats(user.uid)) as SavedChat[];
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => SavedChat)
+  async saveChat(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('name') name: string,
+    @Args('messages') messages: string,
+  ) {
+    return (await saveChat(user.uid, name, messages)) as SavedChat;
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async deleteSavedChat(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('chatId', { type: () => ID }) chatId: string,
+  ) {
+    await deleteSavedChat(user.uid, chatId);
+    return true;
+  }
+
   // ── Device Token ─────────────────────────────────────────────────────────────
 
   @UseGuards(AuthGuard)
@@ -222,12 +262,34 @@ export class MeResolver {
     @Args('prompt') prompt: string,
     @Args('history', { type: () => [ChatMessageInput], nullable: true, defaultValue: [] })
     history: ChatMessageInput[],
+    @Args('listingId', { nullable: true }) listingId?: string,
   ): Promise<string> {
+    // Fetch the specific listing from the map card (becomes primary context)
+    let primaryListing: any = null;
+    if (listingId) {
+      try { primaryListing = await getListing(listingId); } catch {}
+    }
+
+    // Search our DB for listings relevant to the user's prompt
+    let searchResults: any[] = [];
+    try {
+      const result = (await searchListings({ q: prompt.slice(0, 150), limit: 5, includePremium: true })) as any;
+      searchResults = result?.listings ?? [];
+    } catch {}
+
+    // Build context — primary listing first, then search results (excluding primary)
+    const listingsContext = [
+      ...(primaryListing ? [{ ...primaryListing, isPrimary: true }] : []),
+      ...searchResults
+        .filter((l: any) => l.id !== primaryListing?.id)
+        .map((l: any) => ({ ...l, isPrimary: false })),
+    ];
+
     const messages = [
       ...history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user' as const, content: prompt },
     ];
-    return aiPlanItinerary(messages);
+    return aiPlanItinerary(messages, listingsContext.length ? listingsContext : undefined);
   }
 
   // ── Itinerary ────────────────────────────────────────────────────────────────
