@@ -37,7 +37,20 @@ type ListingContext = {
   price?: string;
   description?: string;
   startDateTime?: string;
+  imageUrl?: string;
   isPrimary?: boolean;
+};
+
+export type PlanResult = {
+  text: string;
+  listings: Array<{
+    id: string;
+    title: string;
+    imageUrl?: string;
+    placeName?: string;
+    price?: string;
+    type: string;
+  }>;
 };
 
 const SYSTEM_PROMPT = `You are the AI travel assistant built into Ceylonify — a Sri Lanka tourism marketplace app. Your ONLY job is to help users plan trips using real experiences listed on Ceylonify.
@@ -62,12 +75,41 @@ Tip: insider note
 Transport: how to get there and time estimate
 [Book on Ceylonify: listing name — LKR price or Free]`;
 
+function extractMentionedListings(
+  text: string,
+  context: ListingContext[],
+): PlanResult['listings'] {
+  const regex = /\[Book on Ceylonify:\s*([^—\]]+)/gi;
+  const mentioned: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    mentioned.push(m[1].trim().toLowerCase());
+  }
+  if (!mentioned.length) return [];
+  return context
+    .filter((l) =>
+      mentioned.some(
+        (t) =>
+          l.title.toLowerCase().includes(t) ||
+          t.includes(l.title.toLowerCase()),
+      ),
+    )
+    .map((l) => ({
+      id: l.id,
+      title: l.title,
+      imageUrl: l.imageUrl,
+      placeName: l.placeName,
+      price: l.price,
+      type: l.type,
+    }));
+}
+
 export async function planItinerary(
   messages: { role: 'user' | 'assistant'; content: string }[],
   listingsContext?: ListingContext[],
-): Promise<string> {
+): Promise<PlanResult> {
   const client = getClient();
-  if (!client) return 'AI planner is not configured. Please contact support.';
+  if (!client) return { text: 'AI planner is not configured. Please contact support.', listings: [] };
   try {
     const systemMessages: { role: 'system'; content: string }[] = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -98,9 +140,11 @@ export async function planItinerary(
       max_tokens: 2000,
       temperature: 0.7,
     });
-    return response.choices[0]?.message?.content?.trim() ?? 'Sorry, I could not generate a plan. Please try again.';
+    const rawText = response.choices[0]?.message?.content?.trim() ?? 'Sorry, I could not generate a plan. Please try again.';
+    const matchedListings = extractMentionedListings(rawText, listingsContext ?? []);
+    return { text: rawText, listings: matchedListings };
   } catch {
-    return 'Sorry, the AI planner is unavailable right now. Please try again later.';
+    return { text: 'Sorry, the AI planner is unavailable right now. Please try again later.', listings: [] };
   }
 }
 

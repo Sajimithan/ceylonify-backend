@@ -69,6 +69,22 @@ class SavedChat {
 }
 
 @ObjectType()
+class PlanListing {
+  @Field(() => ID) id!: string;
+  @Field() title!: string;
+  @Field({ nullable: true }) imageUrl?: string;
+  @Field({ nullable: true }) placeName?: string;
+  @Field({ nullable: true }) price?: string;
+  @Field() type!: string;
+}
+
+@ObjectType()
+class PlanResult {
+  @Field() text!: string;
+  @Field(() => [PlanListing]) listings!: PlanListing[];
+}
+
+@ObjectType()
 class UserRecord {
   @Field() id!: string;
   @Field() firebaseUid!: string;
@@ -257,24 +273,52 @@ export class MeResolver {
   // ── AI Planner ───────────────────────────────────────────────────────────────
 
   @UseGuards(AuthGuard)
-  @Mutation(() => String)
+  @Mutation(() => PlanResult)
   async planItinerary(
     @Args('prompt') prompt: string,
     @Args('history', { type: () => [ChatMessageInput], nullable: true, defaultValue: [] })
     history: ChatMessageInput[],
-    @Args('listingId', { nullable: true }) listingId?: string,
-  ): Promise<string> {
+    @Args('listingId', { nullable: true, type: () => ID }) listingId?: string,
+  ): Promise<{ text: string; listings: PlanListing[] }> {
     // Fetch the specific listing from the map card (becomes primary context)
     let primaryListing: any = null;
     if (listingId) {
       try { primaryListing = await getListing(listingId); } catch {}
     }
 
-    // Search our DB for listings relevant to the user's prompt
+    // Category keyword → enum value map for supplementary category search
+    const CATEGORY_KEYWORDS: Record<string, string> = {
+      beach: 'BEACH', coastal: 'BEACH', shore: 'BEACH',
+      culture: 'CULTURE', cultural: 'CULTURE',
+      heritage: 'HERITAGE', temple: 'HERITAGE', history: 'HERITAGE',
+      adventure: 'ADVENTURE', hike: 'ADVENTURE', trek: 'ADVENTURE',
+      food: 'FOOD', cuisine: 'FOOD', dining: 'FOOD',
+      wellness: 'WELLNESS', spa: 'WELLNESS', yoga: 'WELLNESS',
+      nature: 'NATURE', wildlife: 'NATURE', safari: 'NATURE',
+      party: 'BEACH', festival: 'CULTURE',
+    };
+    const promptLower = prompt.toLowerCase();
+    const detectedCategories = new Set<string>();
+    for (const [kw, cat] of Object.entries(CATEGORY_KEYWORDS)) {
+      if (promptLower.includes(kw)) detectedCategories.add(cat);
+    }
+
+    // Run text search + one category search per detected category in parallel
     let searchResults: any[] = [];
     try {
-      const result = (await searchListings({ q: prompt.slice(0, 150), limit: 5, includePremium: true })) as any;
-      searchResults = result?.listings ?? [];
+      const searches = [
+        searchListings({ q: prompt.slice(0, 150), limit: 5, includePremium: true }),
+        ...[...detectedCategories].map((cat) =>
+          searchListings({ category: cat, limit: 5, includePremium: true }),
+        ),
+      ];
+      const allResults = await Promise.all(searches.map((p) => p.catch(() => null)));
+      const seen = new Set<string>();
+      for (const result of allResults) {
+        for (const l of (result as any)?.listings ?? []) {
+          if (!seen.has(l.id)) { seen.add(l.id); searchResults.push(l); }
+        }
+      }
     } catch {}
 
     // Build context — primary listing first, then search results (excluding primary)

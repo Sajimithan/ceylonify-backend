@@ -87,6 +87,20 @@ type SavedChat {
   updatedAt: String!
 }
 
+type PlanListing {
+  id: ID!
+  title: String!
+  imageUrl: String
+  placeName: String
+  price: String
+  type: String!
+}
+
+type PlanResult {
+  text: String!
+  listings: [PlanListing!]!
+}
+
 type UserRecord {
   id: String!
   firebaseUid: String!
@@ -146,7 +160,7 @@ type Mutation {
   saveChat(name: String!, messages: String!): SavedChat!
   deleteSavedChat(chatId: ID!): Boolean!
   registerDeviceToken(token: String!): Boolean!
-  planItinerary(prompt: String!, history: [ChatMessageInput!] = [], listingId: String): String!
+  planItinerary(prompt: String!, history: [ChatMessageInput!] = [], listingId: ID): PlanResult!
   addToItinerary(listingId: ID!, plannedDate: String!, note: String): ItineraryItem!
   updateItineraryNote(itemId: ID!, note: String!): ItineraryItem!
   removeFromItinerary(itemId: ID!): Boolean!
