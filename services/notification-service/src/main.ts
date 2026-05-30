@@ -69,16 +69,35 @@ app.post('/notify', async (req, res) => {
 
   if (tokens.length === 0) return res.json({ ok: true, sent: 0 });
 
-  try {
-    const result = await admin.messaging().sendEachForMulticast({
-      tokens,
-      notification: { title, body },
-    });
-    return res.json({ ok: true, sent: result.successCount });
-  } catch (error) {
-    console.error('Error sending notification:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+  const expoTokens = tokens.filter((t) => t.startsWith('ExponentPushToken['));
+  const fcmTokens  = tokens.filter((t) => !t.startsWith('ExponentPushToken['));
+
+  if (expoTokens.length > 0) {
+    try {
+      await axios.post(
+        'https://exp.host/--/api/v2/push/send',
+        expoTokens.map((to) => ({ to, title, body, sound: 'default' })),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    } catch (err) {
+      console.error('Expo push failed:', err);
+    }
   }
+
+  if (fcmTokens.length > 0) {
+    try {
+      const result = await admin.messaging().sendEachForMulticast({
+        tokens: fcmTokens,
+        notification: { title, body },
+      });
+      return res.json({ ok: true, sent: result.successCount + expoTokens.length });
+    } catch (error) {
+      console.error('FCM push failed:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  return res.json({ ok: true, sent: expoTokens.length });
 });
 
 const port = Number(process.env.PORT || 3004);

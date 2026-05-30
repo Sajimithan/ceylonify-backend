@@ -21,6 +21,8 @@ model User {
   avatarUrl       String?
   role            Role            @default(TRAVELER)
   fcmToken        String?
+  lastLat         Float?
+  lastLng         Float?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   savedListings   SavedListing[]

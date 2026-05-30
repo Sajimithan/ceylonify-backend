@@ -17,7 +17,21 @@ import { AuthGuard } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { enhanceDescription, moderateListing } from '../ai/ai.service';
-import { getUser } from '../identity/identity.client';
+import { getUser, createNotification, getAdminUsers, getNearbyTravelers } from '../identity/identity.client';
+import axios from 'axios';
+
+async function notifyUsers(
+  notifUrl: string,
+  uids: string[],
+  title: string,
+  body: string,
+) {
+  await Promise.allSettled(
+    uids.map((uid) => axios.post(`${notifUrl}/notify`, { uid, title, body }).catch(() => {})),
+  );
+}
+
+const NOTIF_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004';
 
 import {
   createListing,
@@ -164,7 +178,7 @@ export class ListingsResolver {
     @CurrentUser() user: admin.auth.DecodedIdToken,
     @Args('input') input: CreateListingInput,
   ) {
-    const result = (await createListing(user.uid, input)) as Listing;
+    const result = (await createListing(user.uid, input)) as Listing & { placeName?: string };
     // Fire-and-forget AI moderation — never blocks creation
     void moderateListing(input.title, input.description).then((r) => {
       if (r.flagged) {
@@ -173,6 +187,30 @@ export class ListingsResolver {
         );
       }
     });
+    // Fire-and-forget: notify all admins about new submission
+    void (async () => {
+      try {
+        const admins = await getAdminUsers();
+        const uids = admins.map((a) => a.firebaseUid);
+        const title = 'New listing pending review';
+        const body = `"${input.title}" was submitted and needs approval.`;
+        await notifyUsers(NOTIF_URL, uids, title, body);
+        await Promise.allSettled(uids.map((uid) => createNotification(uid, title, body, 'LISTING_SUBMITTED')));
+      } catch { /* silent */ }
+    })();
+    // Fire-and-forget: notify nearby travelers for EVENT type
+    if (input.type === 'EVENT') {
+      void (async () => {
+        try {
+          const travelers = await getNearbyTravelers(input.lat, input.lng, 50);
+          const uids = travelers.map((t) => t.firebaseUid);
+          const title = 'New event near you';
+          const body = `${input.title}${input.placeName ? ` at ${input.placeName}` : ''}`;
+          await notifyUsers(NOTIF_URL, uids, title, body);
+          await Promise.allSettled(uids.map((uid) => createNotification(uid, title, body, 'NEW_EVENT_NEARBY')));
+        } catch { /* silent */ }
+      })();
+    }
     return result;
   }
 

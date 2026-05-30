@@ -4,6 +4,7 @@ import {
   Query,
   ObjectType,
   Field,
+  Float,
   Mutation,
   Args,
   ID,
@@ -34,6 +35,7 @@ import {
   saveChat,
   getSavedChats,
   deleteSavedChat,
+  updateUserLocation,
 } from '../identity/identity.client';
 import { getListing, addAuditLog, searchListings } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
@@ -267,6 +269,17 @@ export class MeResolver {
     } catch {
       // best effort
     }
+    return true;
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async updateUserLocation(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('lat', { type: () => Float }) lat: number,
+    @Args('lng', { type: () => Float }) lng: number,
+  ) {
+    await updateUserLocation(user.uid, lat, lng);
     return true;
   }
 

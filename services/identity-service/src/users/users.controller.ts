@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
@@ -93,6 +94,48 @@ export class UsersController implements OnModuleInit {
   @Patch(':id/role')
   async updateRole(@Param('id') id: string, @Body() body: { role: Role }) {
     return this.prisma.user.update({ where: { id }, data: { role: body.role } });
+  }
+
+  @Get('admins')
+  async getAdmins() {
+    return this.prisma.user.findMany({
+      where: { role: Role.ADMIN },
+      select: { firebaseUid: true, fcmToken: true },
+    });
+  }
+
+  @Get('nearby-travelers')
+  async getNearbyTravelers(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('radiusKm') radiusKm?: string,
+  ) {
+    const latN = parseFloat(lat);
+    const lngN = parseFloat(lng);
+    const radius = radiusKm ? parseFloat(radiusKm) : 50;
+    return this.prisma.$queryRaw`
+      SELECT "firebaseUid", "fcmToken"
+      FROM "User"
+      WHERE role = 'TRAVELER'
+        AND "lastLat" IS NOT NULL AND "lastLng" IS NOT NULL
+        AND (6371 * acos(
+              cos(radians(${latN})) * cos(radians("lastLat")) *
+              cos(radians("lastLng") - radians(${lngN})) +
+              sin(radians(${latN})) * sin(radians("lastLat"))
+            )) <= ${radius}
+    `;
+  }
+
+  @Patch(':firebaseUid/location')
+  async updateLocation(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { lat: number; lng: number },
+  ) {
+    return this.prisma.user.update({
+      where: { firebaseUid },
+      data: { lastLat: body.lat, lastLng: body.lng },
+      select: { id: true },
+    });
   }
 
   // ── Saved Listings ────────────────────────────────────────────────────────

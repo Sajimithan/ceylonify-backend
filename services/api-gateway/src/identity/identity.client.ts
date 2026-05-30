@@ -139,3 +139,31 @@ export async function deleteSavedChat(firebaseUid: string, chatId: string) {
   const res = await axios.delete(`${SERVICES.identity}/users/${firebaseUid}/chats/${chatId}`);
   return res.data as unknown;
 }
+
+// ── Notification helpers ──────────────────────────────────────────────────────
+
+export async function getAdminUsers(): Promise<{ firebaseUid: string; fcmToken: string | null }[]> {
+  try {
+    const res = await axios.get(`${SERVICES.identity}/users/admins`);
+    return res.data as { firebaseUid: string; fcmToken: string | null }[];
+  } catch { return []; }
+}
+
+export async function getNearbyTravelers(
+  lat: number,
+  lng: number,
+  radiusKm = 50,
+): Promise<{ firebaseUid: string; fcmToken: string | null }[]> {
+  try {
+    const res = await axios.get(
+      `${SERVICES.identity}/users/nearby-travelers?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`,
+    );
+    return res.data as { firebaseUid: string; fcmToken: string | null }[];
+  } catch { return []; }
+}
+
+export async function updateUserLocation(uid: string, lat: number, lng: number) {
+  try {
+    await axios.patch(`${SERVICES.identity}/users/${uid}/location`, { lat, lng });
+  } catch { /* best effort */ }
+}
