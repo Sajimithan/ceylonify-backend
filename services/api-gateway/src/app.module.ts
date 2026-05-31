@@ -18,10 +18,16 @@ import { UploadController } from './upload.controller';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/uploads',
-    }),
+    ServeStaticModule.forRoot(
+      {
+        rootPath: join(__dirname, '..', 'uploads'),
+        serveRoot: '/uploads',
+      },
+      {
+        rootPath: join(__dirname, '..', 'uploads', 'documents'),
+        serveRoot: '/uploads/documents',
+      },
+    ),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
       autoSchemaFile: join(process.cwd(), 'schema.gql'),
