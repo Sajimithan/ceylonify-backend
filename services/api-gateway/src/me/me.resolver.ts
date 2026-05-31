@@ -80,6 +80,7 @@ class AppNotification {
   @Field() title!: string;
   @Field() body!: string;
   @Field() type!: string;
+  @Field({ nullable: true }) resourceId?: string;
   @Field() read!: boolean;
   @Field() createdAt!: string;
 }

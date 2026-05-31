@@ -336,12 +336,18 @@ export class UsersController implements OnModuleInit {
   @Post(':firebaseUid/notifications')
   async createNotification(
     @Param('firebaseUid') firebaseUid: string,
-    @Body() body: { title: string; body: string; type: string },
+    @Body() body: { title: string; body: string; type: string; resourceId?: string },
   ) {
     const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
     if (!user) throw new NotFoundException('User not found');
     return this.prisma.notification.create({
-      data: { userId: user.id, title: body.title, body: body.body, type: body.type },
+      data: {
+        userId: user.id,
+        title: body.title,
+        body: body.body,
+        type: body.type,
+        ...(body.resourceId ? { resourceId: body.resourceId } : {}),
+      },
     });
   }
 

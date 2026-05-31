@@ -97,6 +97,7 @@ type AppNotification {
   title: String!
   body: String!
   type: String!
+  resourceId: String
   read: Boolean!
   createdAt: String!
 }

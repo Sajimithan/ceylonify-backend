@@ -41,14 +41,15 @@ model User {
 }
 
 model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  title     String
-  body      String
-  type      String
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  userId     String
+  title      String
+  body       String
+  type       String
+  resourceId String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model SavedChat {

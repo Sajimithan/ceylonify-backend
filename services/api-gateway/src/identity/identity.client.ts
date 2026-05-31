@@ -180,12 +180,14 @@ export async function createNotification(
   title: string,
   body: string,
   type: string,
+  resourceId?: string,
 ) {
   try {
     await axios.post(`${SERVICES.identity}/users/${firebaseUid}/notifications`, {
       title,
       body,
       type,
+      ...(resourceId ? { resourceId } : {}),
     });
   } catch {
     // best effort — never block the main action

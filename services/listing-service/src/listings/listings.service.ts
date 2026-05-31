@@ -33,27 +33,27 @@ export class ListingsService {
     return process.env.IDENTITY_SERVICE_URL || 'http://localhost:3001';
   }
 
-  private async notifyAdmins(title: string, body: string) {
+  private async notifyAdmins(title: string, body: string, type = 'GENERAL', resourceId?: string) {
     try {
       const res = await axios.get<{ firebaseUid: string }[]>(`${this.identityServiceUrl}/users/admins`);
       const admins = res.data ?? [];
-      await Promise.all(admins.map((a) => this.safeNotify(a.firebaseUid, title, body)));
+      await Promise.all(admins.map((a) => this.safeNotify(a.firebaseUid, title, body, type, resourceId)));
     } catch (err: unknown) {
       console.warn('[listing-service] notifyAdmins failed:', (err as Error)?.message);
     }
   }
 
-  private async safeNotify(uid: string, title: string, body: string) {
+  private async safeNotify(uid: string, title: string, body: string, type = 'GENERAL', resourceId?: string) {
     // Never block core flows. Notifications are “best effort”.
     try {
-      await axios.post(`${this.notificationServiceUrl}/notify`, {
-        uid,
-        title,
-        body,
+      // Push (FCM/Expo)
+      void axios.post(`${this.notificationServiceUrl}/notify`, { uid, title, body }).catch(() => null);
+      // Persist to DB so it appears in the notification bell
+      await axios.post(`${this.identityServiceUrl}/users/${uid}/notifications`, {
+        title, body, type, ...(resourceId ? { resourceId } : {}),
       });
     } catch (err: unknown) {
       const error = err as Error;
-      // Don't throw. Just log.
       console.warn('[listing-service] notify failed:', error?.message ?? error);
     }
   }
@@ -246,6 +246,8 @@ export class ListingsService {
       saved.hostFirebaseUid,
       'Listing approved ✅',
       `Your listing "${saved.title}" is now live.`,
+      'LISTING_APPROVED',
+      saved.id,
     );
 
     return saved;
@@ -265,6 +267,8 @@ export class ListingsService {
       saved.hostFirebaseUid,
       'Listing rejected ❌',
       `Your listing "${saved.title}" was rejected. Reason: ${reason}`,
+      'LISTING_REJECTED',
+      saved.id,
     );
 
     return saved;
@@ -293,6 +297,8 @@ export class ListingsService {
     void this.notifyAdmins(
       'New Report 🚨',
       `A listing has been reported for: ${reason}`,
+      'NEW_REPORT',
+      listingId,
     );
 
     return saved;
@@ -311,6 +317,8 @@ export class ListingsService {
       saved.reporterFirebaseUid,
       'Report Reviewed',
       'Your report has been reviewed. No policy violation was found and the listing remains active.',
+      'REPORT_REVIEWED',
+      saved.listingId,
     );
     return saved;
   }
@@ -324,6 +332,8 @@ export class ListingsService {
       saved.reporterFirebaseUid,
       'Report Actioned ✅',
       'Thank you for your report. We have reviewed the listing and taken appropriate action.',
+      'REPORT_ACTIONED',
+      saved.listingId,
     );
     return saved;
   }
