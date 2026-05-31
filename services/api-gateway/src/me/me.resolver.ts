@@ -42,6 +42,7 @@ import {
   submitHostApplication,
   adminPendingHostApplications,
   adminReviewHostApplication,
+  getAdminUsers,
   getAiUsage,
   incrementAiUsage,
   updateSubscription,
@@ -727,6 +728,17 @@ export class MeResolver {
     @Args('input') input: SubmitHostApplicationInput,
   ): Promise<boolean> {
     await submitHostApplication({ firebaseUid: user.uid, email: user.email, ...input });
+    // Notify all admins about the new host application
+    void (async () => {
+      try {
+        const admins = await getAdminUsers();
+        const title = 'New Host Application';
+        const body = `A new host application from ${user.email ?? user.uid} is pending review.`;
+        await Promise.allSettled(
+          admins.map((a) => createNotification(a.firebaseUid, title, body, 'HOST_APPLICATION')),
+        );
+      } catch { /* silent */ }
+    })();
     return true;
   }
 
