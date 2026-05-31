@@ -644,7 +644,7 @@ export class UsersController implements OnModuleInit {
   @Get('host/:firebaseUid')
   async getHostProfile(@Param('firebaseUid') firebaseUid: string) {
     const user = await this.prisma.user.findFirst({
-      where: { firebaseUid, role: Role.HOST },
+      where: { firebaseUid, role: { in: [Role.HOST, Role.ADMIN] } },
       select: { id: true, firebaseUid: true, displayName: true, avatarUrl: true, email: true, createdAt: true },
     });
     if (!user) throw new NotFoundException('Host not found');
@@ -736,7 +736,7 @@ export class UsersController implements OnModuleInit {
     @Query('offset') offset?: string,
   ) {
     return this.prisma.user.findMany({
-      where: { role: Role.HOST },
+      where: { role: { in: [Role.HOST, Role.ADMIN] } },
       orderBy: { createdAt: 'desc' },
       take: limit ? parseInt(limit, 10) : 20,
       skip: offset ? parseInt(offset, 10) : 0,
