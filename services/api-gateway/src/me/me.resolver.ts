@@ -916,12 +916,13 @@ export class MeResolver {
       approvedCountByHost(firebaseUid),
     ]);
     const now = new Date();
-    const upcomingEvents = listings.filter(
-      (l: any) => l.type !== 'EVENT' || !l.startDateTime || new Date(l.startDateTime) >= now,
-    );
-    const pastEvents = listings.filter(
-      (l: any) => l.type === 'EVENT' && l.startDateTime && new Date(l.startDateTime) < now,
-    );
+    const isPastEvent = (l: any) => {
+      if (l.type !== 'EVENT' || !l.startDateTime) return false;
+      const dt = new Date(l.startDateTime);
+      return !isNaN(dt.getTime()) && dt < now;
+    };
+    const upcomingEvents = listings.filter((l: any) => !isPastEvent(l));
+    const pastEvents = listings.filter((l: any) => isPastEvent(l));
     const totalViews = listings.reduce((sum: number, l: any) => sum + (l.viewCount ?? 0), 0);
     return {
       firebaseUid: userProfile.firebaseUid,
@@ -964,12 +965,13 @@ export class MeResolver {
     ]);
     const approvedListings = listings.filter((l: any) => l.status === 'APPROVED');
     const now = new Date();
-    const upcomingEvents = approvedListings.filter(
-      (l: any) => l.type !== 'EVENT' || !l.startDateTime || new Date(l.startDateTime) >= now,
-    );
-    const pastEvents = approvedListings.filter(
-      (l: any) => l.type === 'EVENT' && l.startDateTime && new Date(l.startDateTime) < now,
-    );
+    const isPastEvent = (l: any) => {
+      if (l.type !== 'EVENT' || !l.startDateTime) return false;
+      const dt = new Date(l.startDateTime);
+      return !isNaN(dt.getTime()) && dt < now;
+    };
+    const upcomingEvents = approvedListings.filter((l: any) => !isPastEvent(l));
+    const pastEvents = approvedListings.filter((l: any) => isPastEvent(l));
     const experiencesByListing = await Promise.all(
       pastEvents.map((l: any) => getListingExperiences(l.id).catch(() => [])),
     );
