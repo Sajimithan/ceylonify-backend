@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import { AuthGuard } from './auth.guard';
 import { AdminGuard } from './admin.guard';
 import { CurrentUser } from './current-user.decorator';
-import { sendPasswordResetEmail } from '../email/email.service';
+import { sendPasswordResetEmail, sendAdminWelcomeEmail } from '../email/email.service';
 import { upsertUser, adminAllUsers, adminChangeUserRole } from '../identity/identity.client';
 import { addAuditLog } from '../listings/listings.client';
 
@@ -47,6 +47,9 @@ export class AuthResolver {
 
     // 4. Audit log
     void addAuditLog('CREATE_ADMIN', caller.uid, firebaseUser.uid, `Created admin account for ${email.trim()}`);
+
+    // 5. Email credentials to new admin (fire-and-forget)
+    void sendAdminWelcomeEmail(email.trim(), password);
 
     return true;
   }
