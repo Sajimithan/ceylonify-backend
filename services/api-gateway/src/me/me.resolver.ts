@@ -419,7 +419,11 @@ export class MeResolver {
   @UseGuards(AuthGuard)
   @Query(() => [AppNotification])
   async myNotifications(@CurrentUser() user: admin.auth.DecodedIdToken) {
-    return (await getNotifications(user.uid)) as AppNotification[];
+    try {
+      return (await getNotifications(user.uid)) as AppNotification[];
+    } catch {
+      return [];
+    }
   }
 
   @UseGuards(AuthGuard)
