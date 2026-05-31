@@ -15,11 +15,11 @@ export async function enhanceDescription(raw: string): Promise<string> {
         {
           role: 'system',
           content:
-            'You are a travel copywriter specializing in Sri Lanka tourism. Improve the listing description to be engaging, vivid, and informative. Keep it under 300 words. Return only the improved text with no extra commentary.',
+            'You are a travel copywriter for Sri Lanka tourism. Rewrite the listing description in 2-3 punchy sentences — vivid, engaging, and strictly under 200 characters. Return only the improved text, nothing else.',
         },
         { role: 'user', content: raw },
       ],
-      max_tokens: 400,
+      max_tokens: 80,
       temperature: 0.7,
     });
     return response.choices[0]?.message?.content?.trim() ?? raw;
@@ -145,6 +145,44 @@ export async function planItinerary(
     return { text: rawText, listings: matchedListings };
   } catch {
     return { text: 'Sorry, the AI planner is unavailable right now. Please try again later.', listings: [] };
+  }
+}
+
+export async function aiReviewContent(
+  title: string,
+  description: string,
+): Promise<{ safe: boolean; confidence: number; flags: string[]; summary: string }> {
+  const client = getClient();
+  if (!client) {
+    return { safe: true, confidence: 0, flags: [], summary: 'AI review not configured — manual review required.' };
+  }
+  try {
+    const result = await client.moderations.create({
+      model: 'omni-moderation-latest',
+      input: `${title}\n\n${description}`,
+    });
+    const outcome = result.results[0];
+    if (!outcome) return { safe: true, confidence: 0, flags: [], summary: 'Unable to analyze content.' };
+
+    const flags = Object.entries(outcome.categories ?? {})
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+
+    const scores = (outcome.category_scores ?? {}) as unknown as Record<string, number>;
+    const allValues = Object.values(scores);
+    const maxScore = flags.length > 0
+      ? Math.max(...flags.map((f) => scores[f] ?? 0))
+      : allValues.length > 0 ? Math.max(...allValues) : 0;
+    const confidence = Math.round(Math.min(maxScore + 0.5, 1) * 100) / 100;
+
+    if (!outcome.flagged) {
+      return { safe: true, confidence: Math.max(0.85, 1 - maxScore), flags: [], summary: 'Content appears suitable for the platform.' };
+    }
+
+    const summary = `Content flagged for: ${flags.join(', ')}. Manual review recommended before approval.`;
+    return { safe: false, confidence, flags, summary };
+  } catch {
+    return { safe: true, confidence: 0, flags: [], summary: 'AI review failed — manual review recommended.' };
   }
 }
 

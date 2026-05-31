@@ -73,6 +73,11 @@ export class ListingsController {
     return this.listings.getListingStats();
   }
 
+  @Get('approved-count')
+  approvedCount(@Query('hostUid') hostUid: string) {
+    return this.listings.approvedCountByHost(hostUid).then((count) => ({ count }));
+  }
+
   @Get('search')
   search(
     @Query('q') q?: string,

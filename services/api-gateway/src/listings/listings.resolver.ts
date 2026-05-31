@@ -16,7 +16,7 @@ import * as admin from 'firebase-admin';
 import { AuthGuard } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { enhanceDescription, moderateListing } from '../ai/ai.service';
+import { enhanceDescription, moderateListing, aiReviewContent } from '../ai/ai.service';
 import { getUser, createNotification, getAdminUsers, getNearbyTravelers } from '../identity/identity.client';
 import axios from 'axios';
 
@@ -52,6 +52,7 @@ import {
   adminDismissReport,
   adminActionReport,
   adminGetAuditLogs,
+  approvedCountByHost,
 } from './listings.client';
 
 // ── ObjectTypes ──────────────────────────────────────────────────────────────
@@ -115,6 +116,28 @@ class AuditLogEntry {
   @Field({ nullable: true }) resourceId?: string;
   @Field({ nullable: true }) details?: string;
   @Field() createdAt!: string;
+}
+
+@ObjectType()
+class AIModerationResult {
+  @Field() safe!: boolean;
+  @Field() confidence!: number;
+  @Field(() => [String]) flags!: string[];
+  @Field() summary!: string;
+}
+
+@ObjectType()
+class HostBadgeResult {
+  @Field() approvedCount!: number;
+  @Field() badgeLevel!: string;
+}
+
+function computeBadge(count: number): string {
+  if (count >= 30) return 'DIAMOND';
+  if (count >= 15) return 'GOLD';
+  if (count >= 5)  return 'SILVER';
+  if (count >= 1)  return 'BRONZE';
+  return 'NONE';
 }
 
 // ── InputTypes ───────────────────────────────────────────────────────────────
@@ -279,6 +302,21 @@ export class ListingsResolver {
   @Mutation(() => String)
   async enhanceDescription(@Args('text') text: string) {
     return enhanceDescription(text);
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => AIModerationResult)
+  async aiReviewListing(
+    @Args('title') title: string,
+    @Args('description') description: string,
+  ): Promise<AIModerationResult> {
+    return aiReviewContent(title, description);
+  }
+
+  @Query(() => HostBadgeResult)
+  async hostBadge(@Args('firebaseUid') firebaseUid: string): Promise<HostBadgeResult> {
+    const count = await approvedCountByHost(firebaseUid);
+    return { approvedCount: count, badgeLevel: computeBadge(count) };
   }
 
   // ── Search / Browse ───────────────────────────────────────────────────────

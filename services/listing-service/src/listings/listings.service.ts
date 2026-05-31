@@ -214,6 +214,10 @@ export class ListingsService {
     return { total, pending, approved, rejected };
   }
 
+  async approvedCountByHost(hostFirebaseUid: string): Promise<number> {
+    return this.repo.count({ where: { hostFirebaseUid, status: ListingStatus.APPROVED } });
+  }
+
 
   async approve(id: string, adminUid = 'system') {
     const listing = await this.repo.findOne({ where: { id } });

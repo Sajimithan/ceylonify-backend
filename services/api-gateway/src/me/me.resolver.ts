@@ -9,6 +9,9 @@ import {
   Args,
   ID,
   InputType,
+  ResolveField,
+  Parent,
+  Int,
 } from '@nestjs/graphql';
 import * as admin from 'firebase-admin';
 import { AuthGuard } from '../auth/auth.guard';
@@ -36,8 +39,11 @@ import {
   getSavedChats,
   deleteSavedChat,
   updateUserLocation,
+  submitHostApplication,
+  adminPendingHostApplications,
+  adminReviewHostApplication,
 } from '../identity/identity.client';
-import { getListing, addAuditLog, searchListings } from '../listings/listings.client';
+import { getListing, addAuditLog, searchListings, approvedCountByHost } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
 import { Listing } from '../listings/listings.resolver';
 
@@ -93,6 +99,8 @@ class UserRecord {
   @Field({ nullable: true }) email?: string;
   @Field() role!: string;
   @Field() createdAt!: string;
+  @Field({ nullable: true }) badgeLevel?: string;
+  @Field(() => Int, { nullable: true }) approvedCount?: number;
 }
 
 @ObjectType()
@@ -128,7 +136,56 @@ class ChatMessageInput {
   @Field() content!: string;
 }
 
-@Resolver()
+function computeBadgeLevel(count: number): string {
+  if (count >= 30) return 'DIAMOND';
+  if (count >= 15) return 'GOLD';
+  if (count >= 5)  return 'SILVER';
+  if (count >= 1)  return 'BRONZE';
+  return 'NONE';
+}
+
+@ObjectType()
+class HostApplicationRecord {
+  @Field() id!: string;
+  @Field() firebaseUid!: string;
+  @Field({ nullable: true }) email?: string;
+  @Field() hostTypes!: string;
+  @Field({ nullable: true }) businessName?: string;
+  @Field({ nullable: true }) businessAddress?: string;
+  @Field({ nullable: true }) businessLat?: number;
+  @Field({ nullable: true }) businessLng?: number;
+  @Field({ nullable: true }) phoneNumber?: string;
+  @Field({ nullable: true }) licenseNumber?: string;
+  @Field({ nullable: true }) idType?: string;
+  @Field({ nullable: true }) idDocumentUrl?: string;
+  @Field({ nullable: true }) businessDocUrl?: string;
+  @Field({ nullable: true }) healthCertUrl?: string;
+  @Field({ nullable: true }) licenseDocUrl?: string;
+  @Field({ nullable: true }) bankDocUrl?: string;
+  @Field() status!: string;
+  @Field() submittedAt!: string;
+  @Field({ nullable: true }) reviewedAt?: string;
+  @Field({ nullable: true }) reviewNote?: string;
+}
+
+@InputType()
+class SubmitHostApplicationInput {
+  @Field() hostTypes!: string;
+  @Field({ nullable: true }) businessName?: string;
+  @Field({ nullable: true }) businessAddress?: string;
+  @Field({ nullable: true }) businessLat?: number;
+  @Field({ nullable: true }) businessLng?: number;
+  @Field({ nullable: true }) phoneNumber?: string;
+  @Field({ nullable: true }) licenseNumber?: string;
+  @Field({ nullable: true }) idType?: string;
+  @Field({ nullable: true }) idDocumentUrl?: string;
+  @Field({ nullable: true }) businessDocUrl?: string;
+  @Field({ nullable: true }) healthCertUrl?: string;
+  @Field({ nullable: true }) licenseDocUrl?: string;
+  @Field({ nullable: true }) bankDocUrl?: string;
+}
+
+@Resolver(() => UserRecord)
 export class MeResolver {
   @UseGuards(AuthGuard)
   @Query(() => Me)
@@ -430,5 +487,58 @@ export class MeResolver {
     const result = (await adminChangeUserRole(id, role)) as UserRecord;
     void addAuditLog('CHANGE_USER_ROLE', adminUser.uid, id, `Changed role to ${role}`);
     return result;
+  }
+
+  // ── Host Applications ────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async submitHostApplication(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('input') input: SubmitHostApplicationInput,
+  ): Promise<boolean> {
+    await submitHostApplication({ firebaseUid: user.uid, email: user.email, ...input });
+    return true;
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => [HostApplicationRecord])
+  async adminPendingHostApplications(): Promise<HostApplicationRecord[]> {
+    return (await adminPendingHostApplications()) as HostApplicationRecord[];
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminReviewHostApplication(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('firebaseUid') firebaseUid: string,
+    @Args('approve') approve: boolean,
+    @Args('reviewNote', { nullable: true }) reviewNote?: string,
+  ): Promise<boolean> {
+    await adminReviewHostApplication(firebaseUid, approve, reviewNote);
+    if (approve) {
+      const allUsers = (await adminAllUsers()) as Array<{ id: string; firebaseUid: string }>;
+      const target = allUsers.find((u) => u.firebaseUid === firebaseUid);
+      if (target) {
+        await adminChangeUserRole(target.id, 'HOST');
+        void addAuditLog('ACTIVATE_HOST', adminUser.uid, target.id, `Activated host account for ${firebaseUid}`);
+      }
+    }
+    return true;
+  }
+
+  // ── Badge resolve fields ─────────────────────────────────────────────────────
+
+  @ResolveField(() => String, { nullable: true })
+  async badgeLevel(@Parent() user: UserRecord): Promise<string> {
+    if (user.role !== 'HOST' && user.role !== 'ADMIN') return 'NONE';
+    const count = await approvedCountByHost(user.firebaseUid);
+    return computeBadgeLevel(count);
+  }
+
+  @ResolveField(() => Int, { nullable: true })
+  async approvedCount(@Parent() user: UserRecord): Promise<number> {
+    if (user.role !== 'HOST' && user.role !== 'ADMIN') return 0;
+    return approvedCountByHost(user.firebaseUid);
   }
 }

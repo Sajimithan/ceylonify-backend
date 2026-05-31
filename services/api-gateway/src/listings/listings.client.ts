@@ -202,3 +202,12 @@ export async function adminActionReport(reportId: string) {
     throw new Error(toMessage(e));
   }
 }
+
+export async function approvedCountByHost(hostUid: string): Promise<number> {
+  try {
+    const res = await axios.get(`${SERVICES.listing}/listings/approved-count?hostUid=${encodeURIComponent(hostUid)}`);
+    return (res.data as { count: number }).count ?? 0;
+  } catch {
+    return 0;
+  }
+}

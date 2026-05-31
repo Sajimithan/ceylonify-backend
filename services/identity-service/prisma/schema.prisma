@@ -71,3 +71,26 @@ model ItineraryItem {
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+model HostApplication {
+  id              String    @id @default(uuid())
+  firebaseUid     String    @unique
+  email           String?
+  hostTypes       String
+  businessName    String?
+  businessAddress String?
+  businessLat     Float?
+  businessLng     Float?
+  phoneNumber     String?
+  licenseNumber   String?
+  idType          String?
+  idDocumentUrl   String?
+  businessDocUrl  String?
+  healthCertUrl   String?
+  licenseDocUrl   String?
+  bankDocUrl      String?
+  status          String    @default("PENDING")
+  submittedAt     DateTime  @default(now())
+  reviewedAt      DateTime?
+  reviewNote      String?
+}

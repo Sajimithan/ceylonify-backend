@@ -167,3 +167,38 @@ export async function updateUserLocation(uid: string, lat: number, lng: number) 
     await axios.patch(`${SERVICES.identity}/users/${uid}/location`, { lat, lng });
   } catch { /* best effort */ }
 }
+
+// ── Host Applications ──────────────────────────────────────────────────────────
+
+export async function submitHostApplication(input: {
+  firebaseUid: string;
+  email?: string;
+  hostTypes: string;
+  businessName?: string;
+  businessAddress?: string;
+  businessLat?: number;
+  businessLng?: number;
+  phoneNumber?: string;
+  licenseNumber?: string;
+  idType?: string;
+  idDocumentUrl?: string;
+  businessDocUrl?: string;
+  healthCertUrl?: string;
+  licenseDocUrl?: string;
+  bankDocUrl?: string;
+}) {
+  const res = await axios.post(`${SERVICES.identity}/host-applications`, input);
+  return res.data as unknown;
+}
+
+export async function adminPendingHostApplications() {
+  const res = await axios.get(`${SERVICES.identity}/host-applications?status=PENDING`);
+  return res.data as unknown;
+}
+
+export async function adminReviewHostApplication(firebaseUid: string, approve: boolean, reviewNote?: string) {
+  const res = await axios.patch(`${SERVICES.identity}/host-applications`, {
+    firebaseUid, approve, reviewNote,
+  });
+  return res.data as unknown;
+}

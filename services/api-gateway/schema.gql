@@ -61,6 +61,18 @@ type AuditLogEntry {
   createdAt: String!
 }
 
+type AIModerationResult {
+  safe: Boolean!
+  confidence: Float!
+  flags: [String!]!
+  summary: String!
+}
+
+type HostBadgeResult {
+  approvedCount: Float!
+  badgeLevel: String!
+}
+
 type Me {
   firebaseUid: String!
   email: String
@@ -107,6 +119,8 @@ type UserRecord {
   email: String
   role: String!
   createdAt: String!
+  badgeLevel: String
+  approvedCount: Int
 }
 
 type UserStats {
@@ -128,6 +142,29 @@ type ItineraryItem {
   listingPlaceName: String
 }
 
+type HostApplicationRecord {
+  id: String!
+  firebaseUid: String!
+  email: String
+  hostTypes: String!
+  businessName: String
+  businessAddress: String
+  businessLat: Float
+  businessLng: Float
+  phoneNumber: String
+  licenseNumber: String
+  idType: String
+  idDocumentUrl: String
+  businessDocUrl: String
+  healthCertUrl: String
+  licenseDocUrl: String
+  bankDocUrl: String
+  status: String!
+  submittedAt: String!
+  reviewedAt: String
+  reviewNote: String
+}
+
 type Query {
   ping: String!
   me: Me!
@@ -137,8 +174,10 @@ type Query {
   myItinerary: [ItineraryItem!]!
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
+  adminPendingHostApplications: [HostApplicationRecord!]!
   myListings: [Listing!]!
   adminReports: [ListingReport!]!
+  hostBadge(firebaseUid: String!): HostBadgeResult!
   searchListings(q: String, category: String, type: String, limit: Int, offset: Int, startAfter: String, startBefore: String): SearchResult!
   nearbyListings(lat: Float!, lng: Float!, radiusKm: Float, limit: Int): [Listing!]!
   relatedListings(listingId: String!, limit: Int): [Listing!]!
@@ -166,6 +205,8 @@ type Mutation {
   updateItineraryNote(itemId: ID!, note: String!): ItineraryItem!
   removeFromItinerary(itemId: ID!): Boolean!
   adminChangeUserRole(id: String!, role: String!): UserRecord!
+  submitHostApplication(input: SubmitHostApplicationInput!): Boolean!
+  adminReviewHostApplication(firebaseUid: String!, approve: Boolean!, reviewNote: String): Boolean!
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
   deleteListing(id: String!): Listing!
@@ -173,6 +214,7 @@ type Mutation {
   adminDismissReport(reportId: ID!): Boolean!
   adminActionReport(reportId: ID!): Boolean!
   enhanceDescription(text: String!): String!
+  aiReviewListing(title: String!, description: String!): AIModerationResult!
   approveListing(id: ID!): Listing!
   rejectListing(id: ID!, reason: String!): Listing!
 }
@@ -180,6 +222,22 @@ type Mutation {
 input ChatMessageInput {
   role: String!
   content: String!
+}
+
+input SubmitHostApplicationInput {
+  hostTypes: String!
+  businessName: String
+  businessAddress: String
+  businessLat: Float
+  businessLng: Float
+  phoneNumber: String
+  licenseNumber: String
+  idType: String
+  idDocumentUrl: String
+  businessDocUrl: String
+  healthCertUrl: String
+  licenseDocUrl: String
+  bankDocUrl: String
 }
 
 input CreateListingInput {
