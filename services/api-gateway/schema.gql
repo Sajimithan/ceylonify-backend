@@ -88,6 +88,7 @@ type Me {
   subscriptionTier: String!
   isPremium: Boolean!
   isSuspended: Boolean!
+  isSuperAdmin: Boolean!
   displayName: String
   avatarUrl: String
   aiUsage: AiUsageType!

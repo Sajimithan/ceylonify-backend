@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import { AuthGuard } from './auth.guard';
 import { AdminGuard } from './admin.guard';
 import { CurrentUser } from './current-user.decorator';
-import { sendPasswordResetEmail, sendAdminWelcomeEmail } from '../email/email.service';
+import { sendPasswordResetEmail } from '../email/email.service';
 import { upsertUser, adminAllUsers, adminChangeUserRole } from '../identity/identity.client';
 import { addAuditLog } from '../listings/listings.client';
 
@@ -45,10 +45,7 @@ export class AuthResolver {
       await adminChangeUserRole(record.id, 'ADMIN');
     }
 
-    // 4. Send welcome email with credentials
-    await sendAdminWelcomeEmail(email.trim(), password);
-
-    // 5. Audit log
+    // 4. Audit log
     void addAuditLog('CREATE_ADMIN', caller.uid, firebaseUser.uid, `Created admin account for ${email.trim()}`);
 
     return true;

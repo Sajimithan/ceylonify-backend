@@ -87,6 +87,7 @@ class Me {
   @Field() subscriptionTier!: string;
   @Field() isPremium!: boolean;
   @Field() isSuspended!: boolean;
+  @Field() isSuperAdmin!: boolean;
   @Field({ nullable: true }) displayName?: string;
   @Field({ nullable: true }) avatarUrl?: string;
   @Field(() => AiUsageType) aiUsage!: AiUsageType;
@@ -331,6 +332,7 @@ export class MeResolver {
       subscriptionTier: tier,
       isPremium: profile.isPremium || profile.role === 'HOST' || profile.role === 'ADMIN',
       isSuspended: profile.isSuspended ?? false,
+      isSuperAdmin: user.uid === (process.env.SUPER_ADMIN_UID ?? ''),
       displayName: profile.displayName ?? null,
       avatarUrl: profile.avatarUrl ?? null,
       phone: profile.phone ?? null,
@@ -704,6 +706,13 @@ export class MeResolver {
     @Args('id') id: string,
     @Args('role') role: string,
   ) {
+    const superAdminUid = process.env.SUPER_ADMIN_UID ?? '';
+    // Only super admin can change role of other admins or promote to admin
+    const allUsers = (await adminAllUsers()) as Array<{ id: string; firebaseUid: string; role: string }>;
+    const target = allUsers.find((u) => u.id === id);
+    if ((target?.role === 'ADMIN' || role === 'ADMIN') && adminUser.uid !== superAdminUid) {
+      throw new Error('Only the super admin can modify admin roles.');
+    }
     const result = (await adminChangeUserRole(id, role)) as UserRecord;
     void addAuditLog('CHANGE_USER_ROLE', adminUser.uid, id, `Changed role to ${role}`);
     return result;
@@ -1029,6 +1038,11 @@ export class MeResolver {
     @CurrentUser() adminUser: admin.auth.DecodedIdToken,
     @Args('firebaseUid') firebaseUid: string,
   ): Promise<boolean> {
+    const superAdminUid = process.env.SUPER_ADMIN_UID ?? '';
+    const target = (await getUser(firebaseUid)) as { role: string } | null;
+    if (target?.role === 'ADMIN' && adminUser.uid !== superAdminUid) {
+      throw new Error('Only the super admin can suspend other admins.');
+    }
     await suspendUser(firebaseUid);
     void addAuditLog('SUSPEND_USER', adminUser.uid, firebaseUid, `Suspended user account`);
     return true;
@@ -1040,6 +1054,11 @@ export class MeResolver {
     @CurrentUser() adminUser: admin.auth.DecodedIdToken,
     @Args('firebaseUid') firebaseUid: string,
   ): Promise<boolean> {
+    const superAdminUid = process.env.SUPER_ADMIN_UID ?? '';
+    const target = (await getUser(firebaseUid)) as { role: string } | null;
+    if (target?.role === 'ADMIN' && adminUser.uid !== superAdminUid) {
+      throw new Error('Only the super admin can activate other admins.');
+    }
     await activateUser(firebaseUid);
     void addAuditLog('ACTIVATE_USER', adminUser.uid, firebaseUid, `Activated user account`);
     return true;
