@@ -264,6 +264,7 @@ type Query {
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
   myHostApplication: HostApplicationRecord
+  adminGetHostApplication(firebaseUid: String!): HostApplicationRecord
   adminPendingHostApplications: [HostApplicationRecord!]!
   isGoing(listingId: ID!): Boolean!
   myExperiences: [EventExperience!]!
@@ -330,6 +331,7 @@ type Mutation {
   approveListing(id: ID!): Listing!
   rejectListing(id: ID!, reason: String!): Listing!
   forgotPassword(email: String!): Boolean!
+  adminCreateAdminAccount(email: String!, password: String!): Boolean!
 }
 
 input ChatMessageInput {

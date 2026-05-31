@@ -721,6 +721,16 @@ export class MeResolver {
     }
   }
 
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => HostApplicationRecord, { nullable: true })
+  async adminGetHostApplication(@Args('firebaseUid') firebaseUid: string) {
+    try {
+      return (await getHostApplication(firebaseUid)) as HostApplicationRecord | null;
+    } catch {
+      return null;
+    }
+  }
+
   @UseGuards(AuthGuard)
   @Mutation(() => Boolean)
   async submitHostApplication(

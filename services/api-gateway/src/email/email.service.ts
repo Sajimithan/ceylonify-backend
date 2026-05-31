@@ -41,3 +41,39 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
     `,
   });
 }
+
+export async function sendAdminWelcomeEmail(to: string, password: string): Promise<void> {
+  const from = `"Ceylonify" <${process.env.SMTP_FROM ?? process.env.SMTP_USER}>`;
+  const loginUrl = process.env.WEB_APP_URL ?? 'http://localhost:5173/login';
+
+  await createTransport().sendMail({
+    from,
+    to,
+    subject: 'Your Ceylonify Admin Account',
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#fff;border-radius:12px;border:1px solid #e5e7eb;">
+        <h2 style="color:#0ea5e9;margin:0 0 4px;">Ceylonify</h2>
+        <p style="color:#94a3b8;font-size:12px;margin:0 0 24px;">Sri Lanka Travel Platform</p>
+        <h3 style="color:#1e293b;margin:0 0 12px;">Admin Account Created</h3>
+        <p style="color:#64748b;font-size:15px;line-height:1.6;margin:0 0 20px;">
+          An admin account has been created for you on the Ceylonify dashboard. Use the credentials below to sign in.
+        </p>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin:0 0 20px;">
+          <p style="margin:0 0 8px;font-size:13px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Email</p>
+          <p style="margin:0 0 16px;font-size:15px;color:#1e293b;font-weight:600;">${to}</p>
+          <p style="margin:0 0 8px;font-size:13px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Temporary Password</p>
+          <p style="margin:0;font-size:18px;color:#0ea5e9;font-weight:700;font-family:monospace;letter-spacing:.08em;">${password}</p>
+        </div>
+        <a href="${loginUrl}"
+           style="display:inline-block;padding:13px 32px;background:#0ea5e9;color:#fff;font-weight:700;border-radius:8px;text-decoration:none;font-size:15px;">
+          Sign In to Dashboard
+        </a>
+        <p style="color:#94a3b8;font-size:13px;margin:24px 0 0;">
+          Please change your password after your first login. Keep these credentials secure.
+        </p>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+        <p style="color:#cbd5e1;font-size:12px;margin:0;">© ${new Date().getFullYear()} Ceylonify</p>
+      </div>
+    `,
+  });
+}
