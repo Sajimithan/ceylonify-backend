@@ -26,8 +26,21 @@ export class ListingsService {
   }
 
   private get notificationServiceUrl() {
-    // Use env in docker/local; fallback to localhost for dev
     return process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004';
+  }
+
+  private get identityServiceUrl() {
+    return process.env.IDENTITY_SERVICE_URL || 'http://localhost:3001';
+  }
+
+  private async notifyAdmins(title: string, body: string) {
+    try {
+      const res = await axios.get<{ firebaseUid: string }[]>(`${this.identityServiceUrl}/users/admins`);
+      const admins = res.data ?? [];
+      await Promise.all(admins.map((a) => this.safeNotify(a.firebaseUid, title, body)));
+    } catch (err: unknown) {
+      console.warn('[listing-service] notifyAdmins failed:', (err as Error)?.message);
+    }
   }
 
   private async safeNotify(uid: string, title: string, body: string) {
@@ -262,6 +275,7 @@ export class ListingsService {
     listingId: string,
     reason: string,
     comment?: string,
+    imageUrls?: string[],
   ) {
     const listing = await this.repo.findOne({ where: { id: listingId } });
     if (!listing) throw new NotFoundException('Listing not found');
@@ -271,9 +285,17 @@ export class ListingsService {
       reporterFirebaseUid,
       reason,
       comment,
+      imageUrls: JSON.stringify(imageUrls ?? []),
       status: ReportStatus.PENDING,
     });
-    return this.reportRepo.save(report);
+    const saved = await this.reportRepo.save(report);
+
+    void this.notifyAdmins(
+      'New Report 🚨',
+      `A listing has been reported for: ${reason}`,
+    );
+
+    return saved;
   }
 
   async adminGetReports() {
@@ -284,13 +306,25 @@ export class ListingsService {
     const report = await this.reportRepo.findOne({ where: { id } });
     if (!report) throw new NotFoundException('Report not found');
     report.status = ReportStatus.DISMISSED;
-    return this.reportRepo.save(report);
+    const saved = await this.reportRepo.save(report);
+    void this.safeNotify(
+      saved.reporterFirebaseUid,
+      'Report Reviewed',
+      'Your report has been reviewed. No policy violation was found and the listing remains active.',
+    );
+    return saved;
   }
 
   async adminActionReport(id: string) {
     const report = await this.reportRepo.findOne({ where: { id } });
     if (!report) throw new NotFoundException('Report not found');
     report.status = ReportStatus.ACTIONED;
-    return this.reportRepo.save(report);
+    const saved = await this.reportRepo.save(report);
+    void this.safeNotify(
+      saved.reporterFirebaseUid,
+      'Report Actioned ✅',
+      'Thank you for your report. We have reviewed the listing and taken appropriate action.',
+    );
+    return saved;
   }
 }

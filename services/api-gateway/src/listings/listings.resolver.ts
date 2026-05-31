@@ -104,6 +104,7 @@ class ListingReport {
   @Field() reporterFirebaseUid!: string;
   @Field() reason!: string;
   @Field({ nullable: true }) comment?: string;
+  @Field(() => [String], { nullable: true }) imageUrls?: string[];
   @Field() status!: string;
   @Field() createdAt!: string;
 }
@@ -271,15 +272,20 @@ export class ListingsResolver {
     @Args('listingId', { type: () => ID }) listingId: string,
     @Args('reason') reason: string,
     @Args('comment', { nullable: true }) comment?: string,
+    @Args('imageUrls', { type: () => [String], nullable: true }) imageUrls?: string[],
   ) {
-    await reportListing(user.uid, listingId, reason, comment);
+    await reportListing(user.uid, listingId, reason, comment, imageUrls);
     return true;
   }
 
   @UseGuards(AuthGuard, AdminGuard)
   @Query(() => [ListingReport])
   async adminReports() {
-    return (await adminGetReports()) as ListingReport[];
+    const raw = (await adminGetReports()) as (ListingReport & { imageUrls?: string })[];
+    return raw.map((r) => ({
+      ...r,
+      imageUrls: r.imageUrls ? (JSON.parse(r.imageUrls) as string[]) : [],
+    }));
   }
 
   @UseGuards(AuthGuard, AdminGuard)

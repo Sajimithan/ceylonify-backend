@@ -220,13 +220,14 @@ export async function reportListing(
   listingId: string,
   reason: string,
   comment?: string,
+  imageUrls?: string[],
 ) {
   return withRetry(
     () =>
       axios
         .post(
           `${SERVICES.listing}/listings/${listingId}/report`,
-          { reason, comment },
+          { reason, comment, imageUrls },
           { headers: { 'x-user-uid': uid } },
         )
         .then((r) => r.data as unknown),

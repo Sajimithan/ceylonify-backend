@@ -48,6 +48,7 @@ type ListingReport {
   reporterFirebaseUid: String!
   reason: String!
   comment: String
+  imageUrls: [String!]
   status: String!
   createdAt: String!
 }
@@ -130,6 +131,17 @@ type UserRecord {
   createdAt: String!
   badgeLevel: String
   approvedCount: Int
+  phone: String
+}
+
+type FeatureFlagType {
+  key: String!
+  label: String!
+  description: String!
+  enabledForTravelers: Boolean!
+  enabledForHosts: Boolean!
+  updatedAt: String!
+  updatedByAdminUid: String
 }
 
 type UserStats {
@@ -180,6 +192,7 @@ type Query {
   savedListings: [Listing!]!
   myNotifications: [AppNotification!]!
   savedChats: [SavedChat!]!
+  featureFlags: [FeatureFlagType!]!
   myItinerary: [ItineraryItem!]!
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
@@ -209,6 +222,8 @@ type Mutation {
   deleteSavedChat(chatId: ID!): Boolean!
   registerDeviceToken(token: String!): Boolean!
   updateUserLocation(lat: Float!, lng: Float!): Boolean!
+  adminUpdateFeatureFlag(key: String!, enabledForTravelers: Boolean, enabledForHosts: Boolean): Boolean!
+  adminUpdateUserPhone(firebaseUid: String!, phone: String!): Boolean!
   planItinerary(prompt: String!, history: [ChatMessageInput!] = [], listingId: ID): PlanResult!
   adminUpdateUserSubscription(targetFirebaseUid: String!, tier: String!): Boolean!
   addToItinerary(listingId: ID!, plannedDate: String!, note: String): ItineraryItem!
@@ -220,7 +235,7 @@ type Mutation {
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
   deleteListing(id: String!): Listing!
-  reportListing(listingId: ID!, reason: String!, comment: String): Boolean!
+  reportListing(listingId: ID!, reason: String!, comment: String, imageUrls: [String!]): Boolean!
   adminDismissReport(reportId: ID!): Boolean!
   adminActionReport(reportId: ID!): Boolean!
   enhanceDescription(text: String!): String!

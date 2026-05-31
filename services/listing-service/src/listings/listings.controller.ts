@@ -156,9 +156,9 @@ export class ListingsController {
   reportListing(
     @Param('id') id: string,
     @Headers('x-user-uid') uid: string,
-    @Body() body: { reason: string; comment?: string },
+    @Body() body: { reason: string; comment?: string; imageUrls?: string[] },
   ) {
-    return this.listings.reportListing(uid, id, body.reason, body.comment);
+    return this.listings.reportListing(uid, id, body.reason, body.comment, body.imageUrls);
   }
 
   // Admin: get all reports

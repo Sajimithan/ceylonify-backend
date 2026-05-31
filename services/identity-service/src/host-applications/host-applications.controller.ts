@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,6 +38,11 @@ export class HostApplicationsController {
       update: { ...body, status: 'PENDING', submittedAt: new Date() },
       create: { ...body, status: 'PENDING' },
     });
+  }
+
+  @Get('by-uid/:firebaseUid')
+  async getByUid(@Param('firebaseUid') firebaseUid: string) {
+    return this.db.hostApplication.findUnique({ where: { firebaseUid } });
   }
 
   @Get()

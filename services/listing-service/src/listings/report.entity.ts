@@ -28,6 +28,9 @@ export class Report {
   @Column({ type: 'text', nullable: true })
   comment?: string;
 
+  @Column({ type: 'text', nullable: true })
+  imageUrls?: string; // JSON.stringify(string[])
+
   @Column({ type: 'enum', enum: ReportStatus, default: ReportStatus.PENDING })
   status!: ReportStatus;
 

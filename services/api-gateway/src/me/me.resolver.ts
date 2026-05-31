@@ -45,6 +45,10 @@ import {
   getAiUsage,
   incrementAiUsage,
   updateSubscription,
+  getFeatureFlags,
+  updateFeatureFlagClient,
+  getHostApplication,
+  updateUserPhone,
 } from '../identity/identity.client';
 import { getListing, addAuditLog, searchListings, approvedCountByHost } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
@@ -114,6 +118,18 @@ class UserRecord {
   @Field() createdAt!: string;
   @Field({ nullable: true }) badgeLevel?: string;
   @Field(() => Int, { nullable: true }) approvedCount?: number;
+  @Field({ nullable: true }) phone?: string;
+}
+
+@ObjectType()
+class FeatureFlagType {
+  @Field() key!: string;
+  @Field() label!: string;
+  @Field() description!: string;
+  @Field() enabledForTravelers!: boolean;
+  @Field() enabledForHosts!: boolean;
+  @Field() updatedAt!: string;
+  @Field({ nullable: true }) updatedByAdminUid?: string;
 }
 
 @ObjectType()
@@ -386,6 +402,38 @@ export class MeResolver {
     return true;
   }
 
+  // ── Feature Flags ────────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Query(() => [FeatureFlagType])
+  async featureFlags() {
+    return getFeatureFlags();
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminUpdateFeatureFlag(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('key') key: string,
+    @Args('enabledForTravelers', { nullable: true, type: () => Boolean }) enabledForTravelers?: boolean,
+    @Args('enabledForHosts', { nullable: true, type: () => Boolean }) enabledForHosts?: boolean,
+  ) {
+    await updateFeatureFlagClient(key, { enabledForTravelers, enabledForHosts }, user.uid);
+    return true;
+  }
+
+  // ── Admin User Phone ──────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminUpdateUserPhone(
+    @Args('firebaseUid') firebaseUid: string,
+    @Args('phone') phone: string,
+  ) {
+    await updateUserPhone(firebaseUid, phone);
+    return true;
+  }
+
   // ── AI Planner ───────────────────────────────────────────────────────────────
 
   @UseGuards(AuthGuard)
@@ -595,6 +643,10 @@ export class MeResolver {
       if (target) {
         await adminChangeUserRole(target.id, 'HOST');
         void addAuditLog('ACTIVATE_HOST', adminUser.uid, target.id, `Activated host account for ${firebaseUid}`);
+        // Copy phone from application to user profile for emergency contact access
+        void getHostApplication(firebaseUid).then((app) => {
+          if (app?.phoneNumber) updateUserPhone(firebaseUid, app.phoneNumber);
+        });
       }
     }
     return true;

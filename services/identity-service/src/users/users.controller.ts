@@ -17,11 +17,27 @@ import { Role, SubscriptionTier } from '@prisma/client';
 export class UsersController implements OnModuleInit {
   constructor(private prisma: PrismaService) {}
 
-  onModuleInit() {
+  async onModuleInit() {
     // Day-before event reminder — runs every hour, fires at 9 AM UTC
     setInterval(() => this.sendDayBeforeReminders(), 60 * 60 * 1000);
     // Also run once on startup (catches missed runs during restarts)
     this.sendDayBeforeReminders();
+    // Seed default feature flags (idempotent — upsert never overwrites existing values)
+    await this.seedFeatureFlags();
+  }
+
+  private async seedFeatureFlags() {
+    const FLAGS = [
+      { key: 'AI_TRIP_PLANNER',       label: 'AI Trip Planner',       description: 'Enable the AI-powered travel planning feature',        enabledForTravelers: true,  enabledForHosts: true  },
+      { key: 'HOST_LISTING_CREATION', label: 'Listing Creation',       description: 'Allow hosts to create and edit listings',              enabledForTravelers: false, enabledForHosts: true  },
+      { key: 'NEAR_ME_SEARCH',        label: 'Near Me Search',         description: 'Enable location-based nearby experiences search',      enabledForTravelers: true,  enabledForHosts: true  },
+      { key: 'MAP_VIEW',              label: 'Map View',               description: 'Enable map view in browse/explore screens',            enabledForTravelers: true,  enabledForHosts: true  },
+      { key: 'EVENT_NOTIFICATIONS',   label: 'Event Notifications',    description: 'Push notifications for nearby new events (mobile)',    enabledForTravelers: true,  enabledForHosts: false },
+      { key: 'ITINERARY_PLANNER',    label: 'Itinerary Planner',      description: 'Enable trip itinerary planning feature',               enabledForTravelers: true,  enabledForHosts: false },
+    ];
+    for (const flag of FLAGS) {
+      await this.prisma.featureFlag.upsert({ where: { key: flag.key }, create: flag, update: {} });
+    }
   }
 
   private async sendDayBeforeReminders() {
@@ -79,7 +95,21 @@ export class UsersController implements OnModuleInit {
 
   @Get('all')
   async getAllUsers() {
-    return this.prisma.user.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        firebaseUid: true,
+        email: true,
+        displayName: true,
+        role: true,
+        subscriptionTier: true,
+        isPremium: true,
+        phone: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   }
 
   @Get('stats')
@@ -135,6 +165,40 @@ export class UsersController implements OnModuleInit {
       where: { firebaseUid },
       data: { lastLat: body.lat, lastLng: body.lng },
       select: { id: true },
+    });
+  }
+
+  @Patch(':firebaseUid/phone')
+  async updatePhone(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { phone: string },
+  ) {
+    return this.prisma.user.update({
+      where: { firebaseUid },
+      data: { phone: body.phone },
+      select: { id: true, phone: true },
+    });
+  }
+
+  // ── Feature Flags ─────────────────────────────────────────────────────────
+
+  @Get('feature-flags')
+  async getFeatureFlags() {
+    return this.prisma.featureFlag.findMany({ orderBy: { key: 'asc' } });
+  }
+
+  @Patch('feature-flags/:key')
+  async updateFeatureFlag(
+    @Param('key') key: string,
+    @Body() body: { enabledForTravelers?: boolean; enabledForHosts?: boolean; adminUid?: string },
+  ) {
+    return this.prisma.featureFlag.update({
+      where: { key },
+      data: {
+        ...(body.enabledForTravelers !== undefined && { enabledForTravelers: body.enabledForTravelers }),
+        ...(body.enabledForHosts !== undefined && { enabledForHosts: body.enabledForHosts }),
+        updatedByAdminUid: body.adminUid,
+      },
     });
   }
 

@@ -28,6 +28,7 @@ model User {
   subscriptionTier SubscriptionTier @default(FREE)
   isPremium        Boolean          @default(false)
   fcmToken         String?
+  phone            String?
   lastLat          Float?
   lastLng          Float?
   createdAt        DateTime         @default(now())
@@ -87,6 +88,16 @@ model AiUsage {
   tokensUsed   Int      @default(0)
   resetAt      DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FeatureFlag {
+  key                 String   @id
+  label               String
+  description         String
+  enabledForTravelers Boolean  @default(true)
+  enabledForHosts     Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
+  updatedByAdminUid   String?
 }
 
 model HostApplication {

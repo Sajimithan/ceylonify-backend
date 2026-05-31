@@ -295,6 +295,37 @@ export async function deleteSavedChat(firebaseUid: string, chatId: string) {
   );
 }
 
+// ── Feature Flags ─────────────────────────────────────────────────────────────
+
+export async function getFeatureFlags() {
+  const res = await axios.get(`${SERVICES.identity}/users/feature-flags`);
+  return res.data as unknown;
+}
+
+export async function updateFeatureFlagClient(
+  key: string,
+  updates: { enabledForTravelers?: boolean; enabledForHosts?: boolean },
+  adminUid: string,
+) {
+  const res = await axios.patch(`${SERVICES.identity}/users/feature-flags/${key}`, { ...updates, adminUid });
+  return res.data as unknown;
+}
+
+// ── Host Application ──────────────────────────────────────────────────────────
+
+export async function getHostApplication(firebaseUid: string) {
+  try {
+    const res = await axios.get(`${SERVICES.identity}/host-applications/by-uid/${firebaseUid}`);
+    return res.data as { phoneNumber?: string } | null;
+  } catch { return null; }
+}
+
+export async function updateUserPhone(firebaseUid: string, phone: string) {
+  try {
+    await axios.patch(`${SERVICES.identity}/users/${firebaseUid}/phone`, { phone });
+  } catch { /* best effort */ }
+}
+
 // ── Notification helpers ──────────────────────────────────────────────────────
 
 export async function getAdminUsers(): Promise<
