@@ -52,6 +52,7 @@ import {
   markEmailVerifiedClient,
   markPhoneVerifiedClient,
   selfUpgradePremiumClient,
+  deleteUserAccount,
   checkGoing,
   shareExperience,
   getMyExperiences,
@@ -738,6 +739,16 @@ export class MeResolver {
   async approvedCount(@Parent() user: UserRecord): Promise<number> {
     if (user.role !== 'HOST' && user.role !== 'ADMIN') return 0;
     return approvedCountByHost(user.firebaseUid);
+  }
+
+  // ── Delete Account ────────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async deleteMyAccount(@CurrentUser() user: admin.auth.DecodedIdToken): Promise<boolean> {
+    await deleteUserAccount(user.uid);
+    await admin.auth().deleteUser(user.uid).catch(() => {});
+    return true;
   }
 
   // ── F2: Premium Verification ─────────────────────────────────────────────────

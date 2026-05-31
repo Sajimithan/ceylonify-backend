@@ -130,8 +130,12 @@ export class ListingsService {
     startAfter?: string;
     startBefore?: string;
     hidePastEvents?: boolean;
+    priceMin?: number;
+    priceMax?: number;
+    sortBy?: string;
+    sortOrder?: string;
   }) {
-    const { q, category, type, limit = 12, offset = 0, includePremium = true, startAfter, startBefore, hidePastEvents } = params;
+    const { q, category, type, limit = 12, offset = 0, includePremium = true, startAfter, startBefore, hidePastEvents, priceMin, priceMax, sortBy, sortOrder } = params;
     const qb = this.repo
       .createQueryBuilder('listing')
       .where('listing.status = :status', { status: ListingStatus.APPROVED });
@@ -164,8 +168,24 @@ export class ListingsService {
         { now: new Date() },
       );
     }
+    if (priceMin !== undefined) {
+      qb.andWhere('listing.price >= :priceMin', { priceMin });
+    }
+    if (priceMax !== undefined) {
+      qb.andWhere('listing.price <= :priceMax', { priceMax });
+    }
 
-    qb.orderBy('listing.createdAt', 'DESC').skip(offset).take(limit);
+    const order = (sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC') as 'ASC' | 'DESC';
+    if (sortBy === 'price') {
+      qb.orderBy('listing.price', order);
+    } else if (sortBy === 'views') {
+      qb.orderBy('listing.viewCount', order);
+    } else if (sortBy === 'date') {
+      qb.orderBy('listing.startDateTime', order, 'NULLS LAST');
+    } else {
+      qb.orderBy('listing.createdAt', 'DESC');
+    }
+    qb.skip(offset).take(limit);
 
     const [listings, total] = await qb.getManyAndCount();
     return { listings, total };

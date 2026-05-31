@@ -81,6 +81,7 @@ export class Listing {
   @Field({ nullable: true }) startDateTime?: string;
   @Field() isPremium!: boolean;
   @Field(() => Int) viewCount!: number;
+  @Field(() => Int, { nullable: true }) goingCount?: number;
 }
 
 @ObjectType()
@@ -339,10 +340,14 @@ export class ListingsResolver {
     @Args('offset', { nullable: true, type: () => Int }) offset?: number,
     @Args('startAfter', { nullable: true }) startAfter?: string,
     @Args('startBefore', { nullable: true }) startBefore?: string,
+    @Args('priceMin', { nullable: true, type: () => Number }) priceMin?: number,
+    @Args('priceMax', { nullable: true, type: () => Number }) priceMax?: number,
+    @Args('sortBy', { nullable: true }) sortBy?: string,
+    @Args('sortOrder', { nullable: true }) sortOrder?: string,
   ) {
     const profile = (await getUser(user.uid)) as { role: string } | null;
     const isPremium = profile?.role === 'HOST' || profile?.role === 'ADMIN';
-    return (await searchListings({ q, category, type, limit, offset, includePremium: isPremium, startAfter, startBefore, hidePastEvents })) as SearchResult;
+    return (await searchListings({ q, category, type, limit, offset, includePremium: isPremium, startAfter, startBefore, hidePastEvents, priceMin, priceMax, sortBy, sortOrder })) as SearchResult;
   }
 
   @UseGuards(AuthGuard)
@@ -460,5 +465,11 @@ export class ListingsResolver {
   @ResolveField(() => Int)
   viewCount(@Parent() listing: ListingEntity) {
     return listing.viewCount ?? 0;
+  }
+
+  @ResolveField(() => Int, { nullable: true })
+  async goingCount(@Parent() listing: ListingEntity): Promise<number> {
+    if (listing.type !== 'EVENT') return 0;
+    return getGoingCount(listing.id);
   }
 }

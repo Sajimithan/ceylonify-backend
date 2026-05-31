@@ -28,6 +28,7 @@ type Listing {
   startDateTime: String
   isPremium: Boolean!
   viewCount: Int!
+  goingCount: Int
 }
 
 type ListingStats {
@@ -261,7 +262,7 @@ type Query {
   myListings: [Listing!]!
   adminReports: [ListingReport!]!
   hostBadge(firebaseUid: String!): HostBadgeResult!
-  searchListings(q: String, category: String, type: String, limit: Int, hidePastEvents: Boolean, offset: Int, startAfter: String, startBefore: String): SearchResult!
+  searchListings(q: String, category: String, type: String, limit: Int, hidePastEvents: Boolean, offset: Int, startAfter: String, startBefore: String, priceMin: Float, priceMax: Float, sortBy: String, sortOrder: String): SearchResult!
   nearbyListings(lat: Float!, lng: Float!, radiusKm: Float, limit: Int): [Listing!]!
   relatedListings(listingId: String!, limit: Int): [Listing!]!
   feed: [Listing!]!
@@ -293,6 +294,7 @@ type Mutation {
   adminChangeUserRole(id: String!, role: String!): UserRecord!
   submitHostApplication(input: SubmitHostApplicationInput!): Boolean!
   adminReviewHostApplication(firebaseUid: String!, approve: Boolean!, reviewNote: String): Boolean!
+  deleteMyAccount: Boolean!
   markEmailVerified: Boolean!
   markPhoneVerified(phone: String!): Boolean!
   selfUpgradeToPremium: Me!

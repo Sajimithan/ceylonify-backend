@@ -366,6 +366,18 @@ export async function updateUserLocation(uid: string, lat: number, lng: number) 
   }
 }
 
+// ── Delete Account ────────────────────────────────────────────────────────────
+
+export async function deleteUserAccount(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .delete(`${SERVICES.identity}/users/${firebaseUid}`)
+        .then((r) => r.data as unknown),
+    'deleteUserAccount',
+  );
+}
+
 // ── F2: Verification & Self-Upgrade ──────────────────────────────────────────
 
 export async function markEmailVerifiedClient(firebaseUid: string) {
@@ -399,6 +411,15 @@ export async function selfUpgradePremiumClient(firebaseUid: string) {
 }
 
 // ── F4: Going ─────────────────────────────────────────────────────────────────
+
+export async function getGoingCount(listingId: string): Promise<number> {
+  try {
+    const res = await axios.get<{ count: number }>(`${SERVICES.identity}/users/going-count/${listingId}`);
+    return res.data.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
 
 export async function checkGoing(firebaseUid: string, listingId: string): Promise<{ isGoing: boolean; itemId: string | null }> {
   try {

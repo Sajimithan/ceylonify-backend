@@ -4,8 +4,8 @@ import {
   Post,
   Get,
   Patch,
-  Param,
   Delete,
+  Param,
   Query,
   NotFoundException,
   BadRequestException,
@@ -487,6 +487,16 @@ export class UsersController implements OnModuleInit {
     });
   }
 
+  // ── Delete Account ────────────────────────────────────────────────────────
+
+  @Delete(':firebaseUid')
+  async deleteAccount(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    await this.prisma.user.delete({ where: { id: user.id } });
+    return { ok: true };
+  }
+
   // ── F2: Email + Phone Verification & Self-Upgrade ─────────────────────────
 
   @Patch(':firebaseUid/mark-email-verified')
@@ -543,6 +553,14 @@ export class UsersController implements OnModuleInit {
   }
 
   // ── F4: "I'm Going" ────────────────────────────────────────────────────────
+
+  @Get('going-count/:listingId')
+  async getGoingCount(@Param('listingId') listingId: string) {
+    const count = await this.prisma.itineraryItem.count({
+      where: { listingId, isGoingEntry: true },
+    });
+    return { count };
+  }
 
   @Get(':firebaseUid/going/:listingId')
   async checkGoing(

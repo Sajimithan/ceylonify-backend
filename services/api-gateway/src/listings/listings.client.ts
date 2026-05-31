@@ -177,6 +177,10 @@ export async function searchListings(params: {
   startAfter?: string;
   startBefore?: string;
   hidePastEvents?: boolean;
+  priceMin?: number;
+  priceMax?: number;
+  sortBy?: string;
+  sortOrder?: string;
 }) {
   const query = new URLSearchParams();
   if (params.q) query.set('q', params.q);
@@ -188,6 +192,10 @@ export async function searchListings(params: {
   if (params.startAfter) query.set('startAfter', params.startAfter);
   if (params.startBefore) query.set('startBefore', params.startBefore);
   if (params.hidePastEvents) query.set('hidePastEvents', 'true');
+  if (params.priceMin !== undefined) query.set('priceMin', String(params.priceMin));
+  if (params.priceMax !== undefined) query.set('priceMax', String(params.priceMax));
+  if (params.sortBy) query.set('sortBy', params.sortBy);
+  if (params.sortOrder) query.set('sortOrder', params.sortOrder);
   return withRetry(
     () =>
       axios

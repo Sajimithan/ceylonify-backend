@@ -89,6 +89,10 @@ export class ListingsController {
     @Query('startAfter') startAfter?: string,
     @Query('startBefore') startBefore?: string,
     @Query('hidePastEvents') hidePastEvents?: string,
+    @Query('priceMin') priceMin?: string,
+    @Query('priceMax') priceMax?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
   ) {
     return this.listings.searchListings({
       q,
@@ -100,6 +104,10 @@ export class ListingsController {
       startAfter,
       startBefore,
       hidePastEvents: hidePastEvents === 'true',
+      priceMin: priceMin ? parseFloat(priceMin) : undefined,
+      priceMax: priceMax ? parseFloat(priceMax) : undefined,
+      sortBy,
+      sortOrder,
     });
   }
 
