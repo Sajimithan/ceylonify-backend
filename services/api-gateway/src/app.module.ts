@@ -12,6 +12,7 @@ import { ListingsResolver } from './listings/listings.resolver';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminGuard } from './auth/admin.guard';
 import { AuthGuard } from './auth/auth.guard';
+import { AuthResolver } from './auth/auth.resolver';
 import { UploadController } from './upload.controller';
 
 @Module({
@@ -30,6 +31,6 @@ import { UploadController } from './upload.controller';
     NotificationsModule,
   ],
   controllers: [UploadController],
-  providers: [AppResolver, MeResolver, ListingsResolver, AdminGuard, AuthGuard],
+  providers: [AppResolver, MeResolver, ListingsResolver, AuthResolver, AdminGuard, AuthGuard],
 })
 export class AppModule {}

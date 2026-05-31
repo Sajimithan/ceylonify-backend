@@ -328,6 +328,7 @@ type Mutation {
   aiReviewListing(title: String!, description: String!): AIModerationResult!
   approveListing(id: ID!): Listing!
   rejectListing(id: ID!, reason: String!): Listing!
+  forgotPassword(email: String!): Boolean!
 }
 
 input ChatMessageInput {
