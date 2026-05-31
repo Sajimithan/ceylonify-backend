@@ -19,28 +19,41 @@ enum SubscriptionTier {
 }
 
 model User {
-  id               String           @id @default(uuid())
-  firebaseUid      String           @unique
-  email            String?
-  displayName      String?
-  avatarUrl        String?
-  role             Role             @default(TRAVELER)
-  subscriptionTier SubscriptionTier @default(FREE)
-  isPremium        Boolean          @default(false)
-  fcmToken         String?
-  phone            String?
-  lastLat          Float?
-  lastLng          Float?
-  emailVerifiedAt  DateTime?
-  phoneVerifiedAt  DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  savedListings    SavedListing[]
-  itineraryItems   ItineraryItem[]
-  notifications    Notification[]
-  savedChats       SavedChat[]
-  aiUsage          AiUsage?
-  experiences      EventExperience[]
+  id                    String               @id @default(uuid())
+  firebaseUid           String               @unique
+  email                 String?
+  displayName           String?
+  avatarUrl             String?
+  role                  Role                 @default(TRAVELER)
+  subscriptionTier      SubscriptionTier     @default(FREE)
+  isPremium             Boolean              @default(false)
+  isSuspended           Boolean              @default(false)
+  fcmToken              String?
+  phone                 String?
+  lastLat               Float?
+  lastLng               Float?
+  emailVerifiedAt       DateTime?
+  phoneVerifiedAt       DateTime?
+  subscriptionExpiresAt DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  savedListings         SavedListing[]
+  itineraryItems        ItineraryItem[]
+  notifications         Notification[]
+  savedChats            SavedChat[]
+  aiUsage               AiUsage?
+  experiences           EventExperience[]
+  subscriptionEvents    SubscriptionEvent[]
+}
+
+model SubscriptionEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  fromTier  String
+  toTier    String
+  changedAt DateTime @default(now())
+  changedBy String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Notification {

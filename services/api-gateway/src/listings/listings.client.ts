@@ -283,6 +283,20 @@ export async function adminActionReport(reportId: string) {
   );
 }
 
+export async function suspendListing(id: string, adminUid?: string) {
+  return withRetry(
+    () =>
+      axios
+        .patch(
+          `${SERVICES.listing}/listings/${id}/suspend`,
+          {},
+          adminUid ? { headers: { 'x-admin-uid': adminUid } } : {},
+        )
+        .then((r) => r.data as unknown),
+    'suspendListing',
+  );
+}
+
 export async function approvedCountByHost(hostUid: string): Promise<number> {
   try {
     const res = await axios.get(

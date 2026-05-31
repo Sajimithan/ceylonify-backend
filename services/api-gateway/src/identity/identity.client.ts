@@ -366,6 +366,60 @@ export async function updateUserLocation(uid: string, lat: number, lng: number) 
   }
 }
 
+// ── P3.1: Account Suspension ──────────────────────────────────────────────────
+
+export async function suspendUser(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.identity}/users/${firebaseUid}/suspend`)
+        .then((r) => r.data as unknown),
+    'suspendUser',
+  );
+}
+
+export async function activateUser(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.identity}/users/${firebaseUid}/activate`)
+        .then((r) => r.data as unknown),
+    'activateUser',
+  );
+}
+
+// ── P3.4: Announcements ───────────────────────────────────────────────────────
+
+export async function broadcastNotification(title: string, body: string): Promise<{ sent: number }> {
+  try {
+    const res = await axios.post(`${SERVICES.identity}/users/broadcast-notification`, { title, body });
+    return res.data as { sent: number };
+  } catch {
+    return { sent: 0 };
+  }
+}
+
+export async function getAllFcmTokens(): Promise<{ firebaseUid: string; fcmToken: string }[]> {
+  try {
+    const res = await axios.get(`${SERVICES.identity}/users/all-fcm-tokens`);
+    return res.data as { firebaseUid: string; fcmToken: string }[];
+  } catch {
+    return [];
+  }
+}
+
+// ── P4.2: Subscription History ────────────────────────────────────────────────
+
+export async function getSubscriptionHistory(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.identity}/users/${firebaseUid}/subscription-history`)
+        .then((r) => r.data as unknown),
+    'getSubscriptionHistory',
+  );
+}
+
 // ── Delete Account ────────────────────────────────────────────────────────────
 
 export async function deleteUserAccount(firebaseUid: string) {

@@ -7,6 +7,7 @@ import {
 import { GqlExecutionContext } from '@nestjs/graphql';
 import * as admin from 'firebase-admin';
 import { verifyIdToken } from '../firebase/firebase-admin';
+import { getUser } from '../identity/identity.client';
 
 interface AuthRequest {
   headers: Record<string, string | undefined>;
@@ -33,9 +34,15 @@ export class AuthGuard implements CanActivate {
     const token = header.substring('Bearer '.length).trim();
     try {
       const decodedToken = await verifyIdToken(token);
-      req.user = decodedToken; // attach decoded token to request
+      // Check if user is suspended
+      const profile = await getUser(decodedToken.uid).catch(() => null) as { isSuspended?: boolean } | null;
+      if (profile?.isSuspended) {
+        throw new UnauthorizedException('Account is suspended');
+      }
+      req.user = decodedToken;
       return true;
-    } catch {
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Invalid token');
     }
   }

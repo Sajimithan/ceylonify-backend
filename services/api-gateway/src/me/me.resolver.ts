@@ -60,8 +60,13 @@ import {
   getListingExperiences,
   getAllHosts,
   getHostProfile,
+  suspendUser,
+  activateUser,
+  broadcastNotification,
+  getAllFcmTokens,
+  getSubscriptionHistory,
 } from '../identity/identity.client';
-import { getListing, addAuditLog, searchListings, approvedCountByHost, listingsByHost } from '../listings/listings.client';
+import { getListing, addAuditLog, searchListings, approvedCountByHost, listingsByHost, suspendListing } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
 import { Listing } from '../listings/listings.resolver';
 
@@ -80,12 +85,14 @@ class Me {
   @Field() role!: string;
   @Field() subscriptionTier!: string;
   @Field() isPremium!: boolean;
+  @Field() isSuspended!: boolean;
   @Field({ nullable: true }) displayName?: string;
   @Field({ nullable: true }) avatarUrl?: string;
   @Field(() => AiUsageType) aiUsage!: AiUsageType;
   @Field({ nullable: true }) emailVerifiedAt?: string;
   @Field({ nullable: true }) phoneVerifiedAt?: string;
   @Field({ nullable: true }) phone?: string;
+  @Field({ nullable: true }) subscriptionExpiresAt?: string;
 }
 
 @ObjectType()
@@ -134,6 +141,17 @@ class UserRecord {
   @Field({ nullable: true }) badgeLevel?: string;
   @Field(() => Int, { nullable: true }) approvedCount?: number;
   @Field({ nullable: true }) phone?: string;
+  @Field({ nullable: true }) isSuspended?: boolean;
+  @Field({ nullable: true }) subscriptionExpiresAt?: string;
+}
+
+@ObjectType()
+class SubscriptionEventType {
+  @Field(() => ID) id!: string;
+  @Field() fromTier!: string;
+  @Field() toTier!: string;
+  @Field() changedAt!: string;
+  @Field() changedBy!: string;
 }
 
 @ObjectType()
@@ -299,7 +317,7 @@ export class MeResolver {
   async me(@CurrentUser() user: admin.auth.DecodedIdToken) {
     await upsertUser(user.uid, user.email);
     const [profile, usage] = await Promise.all([
-      getUser(user.uid) as Promise<UserProfile & { displayName?: string; avatarUrl?: string; subscriptionTier?: string; isPremium?: boolean; emailVerifiedAt?: string; phoneVerifiedAt?: string; phone?: string }>,
+      getUser(user.uid) as Promise<UserProfile & { displayName?: string; avatarUrl?: string; subscriptionTier?: string; isPremium?: boolean; isSuspended?: boolean; emailVerifiedAt?: string; phoneVerifiedAt?: string; phone?: string; subscriptionExpiresAt?: string }>,
       getAiUsage(user.uid).catch(() => null),
     ]);
     const tier = profile.subscriptionTier ?? 'FREE';
@@ -311,11 +329,13 @@ export class MeResolver {
       role: profile.role,
       subscriptionTier: tier,
       isPremium: profile.isPremium || profile.role === 'HOST' || profile.role === 'ADMIN',
+      isSuspended: profile.isSuspended ?? false,
       displayName: profile.displayName ?? null,
       avatarUrl: profile.avatarUrl ?? null,
       phone: profile.phone ?? null,
       emailVerifiedAt: profile.emailVerifiedAt ?? null,
       phoneVerifiedAt: profile.phoneVerifiedAt ?? null,
+      subscriptionExpiresAt: profile.subscriptionExpiresAt ?? null,
       aiUsage: {
         requestsUsed: used,
         monthlyLimit: limit,
@@ -961,5 +981,72 @@ export class MeResolver {
       pastEvents,
       pastExperiences,
     };
+  }
+
+  // ── P3.1: Account Suspension ──────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminSuspendUser(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('firebaseUid') firebaseUid: string,
+  ): Promise<boolean> {
+    await suspendUser(firebaseUid);
+    void addAuditLog('SUSPEND_USER', adminUser.uid, firebaseUid, `Suspended user account`);
+    return true;
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminActivateUser(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('firebaseUid') firebaseUid: string,
+  ): Promise<boolean> {
+    await activateUser(firebaseUid);
+    void addAuditLog('ACTIVATE_USER', adminUser.uid, firebaseUid, `Activated user account`);
+    return true;
+  }
+
+  // ── P3.2: Suspend Listing ─────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminSuspendListing(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('id') id: string,
+  ): Promise<boolean> {
+    await suspendListing(id, adminUser.uid);
+    return true;
+  }
+
+  // ── P3.4: Admin Announcements ─────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Int)
+  async adminBroadcastAnnouncement(
+    @Args('title') title: string,
+    @Args('body') body: string,
+  ): Promise<number> {
+    const notifServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004';
+    const [dbResult, tokens] = await Promise.all([
+      broadcastNotification(title, body),
+      getAllFcmTokens(),
+    ]);
+    // Fire-and-forget push to all FCM tokens
+    if (tokens.length > 0) {
+      const axios = (await import('axios')).default;
+      void Promise.allSettled(
+        tokens.map((t) => axios.post(`${notifServiceUrl}/notify`, { uid: t.firebaseUid, title, body }).catch(() => {}))
+      );
+    }
+    return dbResult.sent;
+  }
+
+  // ── P4.2: Subscription History ────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => [SubscriptionEventType])
+  async adminSubscriptionHistory(@Args('firebaseUid') firebaseUid: string) {
+    return (await getSubscriptionHistory(firebaseUid)) as SubscriptionEventType[];
   }
 }

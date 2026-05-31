@@ -87,12 +87,14 @@ type Me {
   role: String!
   subscriptionTier: String!
   isPremium: Boolean!
+  isSuspended: Boolean!
   displayName: String
   avatarUrl: String
   aiUsage: AiUsageType!
   emailVerifiedAt: String
   phoneVerifiedAt: String
   phone: String
+  subscriptionExpiresAt: String
 }
 
 type AppNotification {
@@ -136,6 +138,16 @@ type UserRecord {
   badgeLevel: String
   approvedCount: Int
   phone: String
+  isSuspended: Boolean
+  subscriptionExpiresAt: String
+}
+
+type SubscriptionEventType {
+  id: ID!
+  fromTier: String!
+  toTier: String!
+  changedAt: String!
+  changedBy: String!
 }
 
 type FeatureFlagType {
@@ -258,6 +270,7 @@ type Query {
   adminHostDetail(firebaseUid: String!): AdminHostDetail!
   allHosts(limit: Int, offset: Int): [HostCard!]!
   hostPublicProfile(firebaseUid: String!): HostPublicProfile!
+  adminSubscriptionHistory(firebaseUid: String!): [SubscriptionEventType!]!
   myListings: [Listing!]!
   adminReports: [ListingReport!]!
   hostBadge(firebaseUid: String!): HostBadgeResult!
@@ -301,6 +314,10 @@ type Mutation {
   unmarkGoing(listingId: ID!): Boolean!
   shareExperience(listingId: ID!, rating: Int!, text: String!, imageUrls: [String!] = []): EventExperience!
   deleteMyExperience(id: ID!): Boolean!
+  adminSuspendUser(firebaseUid: String!): Boolean!
+  adminActivateUser(firebaseUid: String!): Boolean!
+  adminSuspendListing(id: String!): Boolean!
+  adminBroadcastAnnouncement(title: String!, body: String!): Int!
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
   deleteListing(id: String!): Listing!

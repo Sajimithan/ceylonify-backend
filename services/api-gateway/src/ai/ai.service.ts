@@ -1,22 +1,42 @@
 import OpenAI from 'openai';
 
-function getClient(): OpenAI | null {
+function getOpenAIClient(): OpenAI | null {
   if (!process.env.OPENAI_API_KEY) return null;
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
+// Legacy alias for callers that used the old name
+const getClient = getOpenAIClient;
+
 export async function enhanceDescription(raw: string): Promise<string> {
-  const client = getClient();
+  const SYSTEM = 'You are a travel copywriter for Sri Lanka tourism. Rewrite the listing description in 2-3 punchy sentences — vivid, engaging, and strictly under 200 characters. Return only the improved text, nothing else.';
+
+  // Try Groq first (faster, cheaper)
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    try {
+      const { default: Groq } = await import('groq-sdk');
+      const groq = new Groq({ apiKey: groqKey });
+      const resp = await groq.chat.completions.create({
+        model: process.env.GROQ_MODEL ?? 'llama-3.1-8b-instant',
+        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: raw }],
+        max_tokens: 80,
+        temperature: 0.7,
+      });
+      return resp.choices[0]?.message?.content?.trim() ?? raw;
+    } catch {
+      // fall through to OpenAI
+    }
+  }
+
+  // Fall back to OpenAI
+  const client = getOpenAIClient();
   if (!client) return raw;
   try {
     const response = await client.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        {
-          role: 'system',
-          content:
-            'You are a travel copywriter for Sri Lanka tourism. Rewrite the listing description in 2-3 punchy sentences — vivid, engaging, and strictly under 200 characters. Return only the improved text, nothing else.',
-        },
+        { role: 'system', content: SYSTEM },
         { role: 'user', content: raw },
       ],
       max_tokens: 80,
@@ -154,7 +174,35 @@ export async function aiReviewContent(
   title: string,
   description: string,
 ): Promise<{ safe: boolean; confidence: number; flags: string[]; summary: string }> {
-  const client = getClient();
+  const PROMPT = `Review this travel listing for inappropriate content. Title: "${title}". Description: "${description}". Reply ONLY with JSON: {"safe": true|false, "flags": ["category1"], "summary": "brief explanation"}`;
+
+  // Try Gemini first
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL ?? 'gemini-1.5-flash' });
+      const result = await model.generateContent(PROMPT);
+      const text = result.response.text().trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as { safe?: boolean; flags?: string[]; summary?: string };
+        const flags = parsed.flags ?? [];
+        return {
+          safe: parsed.safe ?? true,
+          confidence: parsed.safe ? 0.9 : 0.8,
+          flags,
+          summary: parsed.summary ?? (parsed.safe ? 'Content appears suitable.' : `Flagged for: ${flags.join(', ')}`),
+        };
+      }
+    } catch {
+      // fall through to OpenAI
+    }
+  }
+
+  // Fall back to OpenAI
+  const client = getOpenAIClient();
   if (!client) {
     return { safe: true, confidence: 0, flags: [], summary: 'AI review not configured — manual review required.' };
   }
