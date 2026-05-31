@@ -263,6 +263,7 @@ type Query {
   myItinerary: [ItineraryItem!]!
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
+  myHostApplication: HostApplicationRecord
   adminPendingHostApplications: [HostApplicationRecord!]!
   isGoing(listingId: ID!): Boolean!
   myExperiences: [EventExperience!]!

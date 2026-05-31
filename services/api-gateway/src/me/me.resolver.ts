@@ -711,6 +711,16 @@ export class MeResolver {
   // ── Host Applications ────────────────────────────────────────────────────────
 
   @UseGuards(AuthGuard)
+  @Query(() => HostApplicationRecord, { nullable: true })
+  async myHostApplication(@CurrentUser() user: admin.auth.DecodedIdToken) {
+    try {
+      return (await getHostApplication(user.uid)) as HostApplicationRecord | null;
+    } catch {
+      return null;
+    }
+  }
+
+  @UseGuards(AuthGuard)
   @Mutation(() => Boolean)
   async submitHostApplication(
     @CurrentUser() user: admin.auth.DecodedIdToken,
