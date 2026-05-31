@@ -1,9 +1,11 @@
 import axios from 'axios';
+import { BadRequestException } from '@nestjs/common';
 import { SERVICES } from '../config/services';
 
 function toMessage(e: unknown): string {
   if (axios.isAxiosError(e)) {
-    const data = e.response?.data as { message?: string } | undefined;
+    const data = e.response?.data as { message?: string | string[] } | undefined;
+    if (Array.isArray(data?.message)) return data!.message.join(', ');
     if (data?.message) return data.message;
     if (e.code === 'ECONNREFUSED' || e.code === 'ECONNRESET')
       return 'Listing service is unavailable';
@@ -16,15 +18,19 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   try {
     return await fn();
   } catch (e) {
-    const isTransient =
-      axios.isAxiosError(e) &&
-      (!e.response || e.response.status >= 500 || e.code === 'ECONNREFUSED');
-    if (isTransient) {
-      await new Promise((r) => setTimeout(r, 5000));
-      try {
-        return await fn();
-      } catch (e2) {
-        throw new Error(`[${label}] ${toMessage(e2)}`);
+    if (axios.isAxiosError(e)) {
+      const status = e.response?.status;
+      if (status && status >= 400 && status < 500) {
+        throw new BadRequestException(toMessage(e));
+      }
+      const isTransient = !e.response || status! >= 500 || e.code === 'ECONNREFUSED';
+      if (isTransient) {
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          return await fn();
+        } catch (e2) {
+          throw new Error(`[${label}] ${toMessage(e2)}`);
+        }
       }
     }
     throw new Error(`[${label}] ${toMessage(e)}`);
