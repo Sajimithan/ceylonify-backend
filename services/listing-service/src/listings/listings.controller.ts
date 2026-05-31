@@ -88,6 +88,7 @@ export class ListingsController {
     @Query('includePremium') includePremium?: string,
     @Query('startAfter') startAfter?: string,
     @Query('startBefore') startBefore?: string,
+    @Query('hidePastEvents') hidePastEvents?: string,
   ) {
     return this.listings.searchListings({
       q,
@@ -98,6 +99,7 @@ export class ListingsController {
       includePremium: includePremium !== 'false',
       startAfter,
       startBefore,
+      hidePastEvents: hidePastEvents === 'true',
     });
   }
 

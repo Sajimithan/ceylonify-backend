@@ -124,6 +124,7 @@ export async function addToItinerary(
   listingId: string,
   plannedDate: string,
   note?: string,
+  isGoingEntry?: boolean,
 ) {
   return withRetry(
     () =>
@@ -132,6 +133,7 @@ export async function addToItinerary(
           listingId,
           plannedDate,
           note,
+          isGoingEntry,
         })
         .then((r) => r.data as unknown),
     'addToItinerary',
@@ -362,6 +364,118 @@ export async function updateUserLocation(uid: string, lat: number, lng: number) 
   } catch {
     // best effort
   }
+}
+
+// ── F2: Verification & Self-Upgrade ──────────────────────────────────────────
+
+export async function markEmailVerifiedClient(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.identity}/users/${firebaseUid}/mark-email-verified`)
+        .then((r) => r.data as unknown),
+    'markEmailVerified',
+  );
+}
+
+export async function markPhoneVerifiedClient(firebaseUid: string, phone: string) {
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.identity}/users/${firebaseUid}/mark-phone-verified`, { phone })
+        .then((r) => r.data as unknown),
+    'markPhoneVerified',
+  );
+}
+
+export async function selfUpgradePremiumClient(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .post(`${SERVICES.identity}/users/${firebaseUid}/self-upgrade-premium`)
+        .then((r) => r.data as unknown),
+    'selfUpgradePremium',
+  );
+}
+
+// ── F4: Going ─────────────────────────────────────────────────────────────────
+
+export async function checkGoing(firebaseUid: string, listingId: string): Promise<{ isGoing: boolean; itemId: string | null }> {
+  try {
+    const res = await axios.get(`${SERVICES.identity}/users/${firebaseUid}/going/${listingId}`);
+    return res.data as { isGoing: boolean; itemId: string | null };
+  } catch {
+    return { isGoing: false, itemId: null };
+  }
+}
+
+// ── F5: Experiences ───────────────────────────────────────────────────────────
+
+export async function shareExperience(
+  firebaseUid: string,
+  listingId: string,
+  rating: number,
+  text: string,
+  imageUrls: string[],
+) {
+  return withRetry(
+    () =>
+      axios
+        .post(`${SERVICES.identity}/users/${firebaseUid}/experiences`, { listingId, rating, text, imageUrls })
+        .then((r) => r.data as unknown),
+    'shareExperience',
+  );
+}
+
+export async function getMyExperiences(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.identity}/users/${firebaseUid}/experiences`)
+        .then((r) => r.data as unknown),
+    'getMyExperiences',
+  );
+}
+
+export async function deleteExperience(firebaseUid: string, id: string) {
+  return withRetry(
+    () =>
+      axios
+        .delete(`${SERVICES.identity}/users/${firebaseUid}/experiences/${id}`)
+        .then((r) => r.data as unknown),
+    'deleteExperience',
+  );
+}
+
+export async function getListingExperiences(listingId: string) {
+  try {
+    const res = await axios.get(`${SERVICES.identity}/experiences/listing/${listingId}`);
+    return res.data as unknown;
+  } catch {
+    return [];
+  }
+}
+
+// ── F6: Hosts ─────────────────────────────────────────────────────────────────
+
+export async function getAllHosts(limit?: number, offset?: number) {
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.identity}/users/hosts?limit=${limit ?? 20}&offset=${offset ?? 0}`)
+        .then((r) => r.data as unknown),
+    'getAllHosts',
+  );
+}
+
+export async function getHostProfile(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.identity}/users/host/${firebaseUid}`)
+        .then((r) => r.data as unknown),
+    'getHostProfile',
+  );
 }
 
 // ── Host Applications ──────────────────────────────────────────────────────────

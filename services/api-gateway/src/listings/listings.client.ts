@@ -176,6 +176,7 @@ export async function searchListings(params: {
   includePremium?: boolean;
   startAfter?: string;
   startBefore?: string;
+  hidePastEvents?: boolean;
 }) {
   const query = new URLSearchParams();
   if (params.q) query.set('q', params.q);
@@ -186,12 +187,23 @@ export async function searchListings(params: {
   if (params.includePremium === false) query.set('includePremium', 'false');
   if (params.startAfter) query.set('startAfter', params.startAfter);
   if (params.startBefore) query.set('startBefore', params.startBefore);
+  if (params.hidePastEvents) query.set('hidePastEvents', 'true');
   return withRetry(
     () =>
       axios
         .get(`${SERVICES.listing}/listings/search?${query.toString()}`)
         .then((r) => r.data as unknown),
     'searchListings',
+  );
+}
+
+export async function listingsByHost(hostUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.listing}/listings/me`, { headers: { 'x-user-uid': hostUid } })
+        .then((r) => r.data as unknown),
+    'listingsByHost',
   );
 }
 

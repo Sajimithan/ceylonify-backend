@@ -8,10 +8,13 @@ import {
   Delete,
   Query,
   NotFoundException,
+  BadRequestException,
+  ForbiddenException,
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Role, SubscriptionTier } from '@prisma/client';
+import Filter from 'bad-words';
 
 @Controller('users')
 export class UsersController implements OnModuleInit {
@@ -281,7 +284,7 @@ export class UsersController implements OnModuleInit {
   @Post(':firebaseUid/itinerary')
   async addToItinerary(
     @Param('firebaseUid') firebaseUid: string,
-    @Body() body: { listingId: string; plannedDate: string; note?: string },
+    @Body() body: { listingId: string; plannedDate: string; note?: string; isGoingEntry?: boolean },
   ) {
     const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
     if (!user) throw new NotFoundException('User not found');
@@ -291,6 +294,7 @@ export class UsersController implements OnModuleInit {
         listingId: body.listingId,
         plannedDate: new Date(body.plannedDate),
         note: body.note,
+        isGoingEntry: body.isGoingEntry ?? false,
       },
     });
   }
@@ -480,6 +484,164 @@ export class UsersController implements OnModuleInit {
         isPremium: body.tier === 'PREMIUM',
       },
       select: { id: true, firebaseUid: true, subscriptionTier: true, isPremium: true },
+    });
+  }
+
+  // ── F2: Email + Phone Verification & Self-Upgrade ─────────────────────────
+
+  @Patch(':firebaseUid/mark-email-verified')
+  async markEmailVerified(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerifiedAt: new Date() },
+      select: { emailVerifiedAt: true },
+    });
+    return updated;
+  }
+
+  @Patch(':firebaseUid/mark-phone-verified')
+  async markPhoneVerified(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { phone: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { phone: body.phone, phoneVerifiedAt: new Date() },
+      select: { phone: true, phoneVerifiedAt: true },
+    });
+    return updated;
+  }
+
+  @Post(':firebaseUid/self-upgrade-premium')
+  async selfUpgradePremium(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.emailVerifiedAt || !user.phoneVerifiedAt) {
+      throw new ForbiddenException('Email and phone must be verified before upgrading to Premium');
+    }
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: { subscriptionTier: SubscriptionTier.PREMIUM, isPremium: true },
+      select: { id: true, firebaseUid: true, subscriptionTier: true, isPremium: true, emailVerifiedAt: true, phoneVerifiedAt: true },
+    });
+  }
+
+  // ── F3: Host public profile ────────────────────────────────────────────────
+
+  @Get('host/:firebaseUid')
+  async getHostProfile(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { firebaseUid, role: Role.HOST },
+      select: { id: true, firebaseUid: true, displayName: true, avatarUrl: true, email: true, createdAt: true },
+    });
+    if (!user) throw new NotFoundException('Host not found');
+    return user;
+  }
+
+  // ── F4: "I'm Going" ────────────────────────────────────────────────────────
+
+  @Get(':firebaseUid/going/:listingId')
+  async checkGoing(
+    @Param('firebaseUid') firebaseUid: string,
+    @Param('listingId') listingId: string,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) return { isGoing: false, itemId: null };
+    const item = await this.prisma.itineraryItem.findFirst({
+      where: { userId: user.id, listingId, isGoingEntry: true },
+    });
+    return { isGoing: !!item, itemId: item?.id ?? null };
+  }
+
+  // ── F5: Event Experiences ─────────────────────────────────────────────────
+
+  private profanityFilter = new Filter();
+
+  @Post(':firebaseUid/experiences')
+  async createExperience(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { listingId: string; rating: number; text: string; imageUrls?: string[] },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    if (!body.listingId || !body.text) throw new BadRequestException('listingId and text are required');
+    if (body.rating < 1 || body.rating > 5) throw new BadRequestException('Rating must be 1–5');
+    if (this.profanityFilter.isProfane(body.text)) {
+      throw new BadRequestException('Content contains inappropriate language');
+    }
+    return this.prisma.eventExperience.upsert({
+      where: { userId_listingId: { userId: user.id, listingId: body.listingId } },
+      create: {
+        userId: user.id,
+        listingId: body.listingId,
+        rating: body.rating,
+        text: body.text,
+        imageUrls: body.imageUrls ?? [],
+      },
+      update: {
+        rating: body.rating,
+        text: body.text,
+        imageUrls: body.imageUrls ?? [],
+      },
+    });
+  }
+
+  @Get(':firebaseUid/experiences')
+  async getMyExperiences(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) return [];
+    return this.prisma.eventExperience.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  @Delete(':firebaseUid/experiences/:id')
+  async deleteExperience(
+    @Param('firebaseUid') firebaseUid: string,
+    @Param('id') id: string,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    await this.prisma.eventExperience.deleteMany({ where: { id, userId: user.id } });
+    return { ok: true };
+  }
+
+  // ── F6: All Hosts list ─────────────────────────────────────────────────────
+
+  @Get('hosts')
+  async getAllHosts(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.prisma.user.findMany({
+      where: { role: Role.HOST },
+      orderBy: { createdAt: 'desc' },
+      take: limit ? parseInt(limit, 10) : 20,
+      skip: offset ? parseInt(offset, 10) : 0,
+      select: { id: true, firebaseUid: true, displayName: true, avatarUrl: true, email: true, createdAt: true },
+    });
+  }
+}
+
+// ── Shared experiences endpoint (not user-scoped) ──────────────────────────
+
+@Controller('experiences')
+export class ExperiencesController {
+  constructor(private prisma: PrismaService) {}
+
+  @Get('listing/:listingId')
+  async getListingExperiences(@Param('listingId') listingId: string) {
+    return this.prisma.eventExperience.findMany({
+      where: { listingId, status: 'APPROVED' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { firebaseUid: true, displayName: true, avatarUrl: true } },
+      },
     });
   }
 }

@@ -335,13 +335,14 @@ export class ListingsResolver {
     @Args('category', { nullable: true }) category?: string,
     @Args('type', { nullable: true }) type?: string,
     @Args('limit', { nullable: true, type: () => Int }) limit?: number,
+    @Args('hidePastEvents', { nullable: true, type: () => Boolean }) hidePastEvents?: boolean,
     @Args('offset', { nullable: true, type: () => Int }) offset?: number,
     @Args('startAfter', { nullable: true }) startAfter?: string,
     @Args('startBefore', { nullable: true }) startBefore?: string,
   ) {
     const profile = (await getUser(user.uid)) as { role: string } | null;
     const isPremium = profile?.role === 'HOST' || profile?.role === 'ADMIN';
-    return (await searchListings({ q, category, type, limit, offset, includePremium: isPremium, startAfter, startBefore })) as SearchResult;
+    return (await searchListings({ q, category, type, limit, offset, includePremium: isPremium, startAfter, startBefore, hidePastEvents })) as SearchResult;
   }
 
   @UseGuards(AuthGuard)

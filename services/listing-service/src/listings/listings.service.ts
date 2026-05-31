@@ -129,8 +129,9 @@ export class ListingsService {
     includePremium?: boolean;
     startAfter?: string;
     startBefore?: string;
+    hidePastEvents?: boolean;
   }) {
-    const { q, category, type, limit = 12, offset = 0, includePremium = true, startAfter, startBefore } = params;
+    const { q, category, type, limit = 12, offset = 0, includePremium = true, startAfter, startBefore, hidePastEvents } = params;
     const qb = this.repo
       .createQueryBuilder('listing')
       .where('listing.status = :status', { status: ListingStatus.APPROVED });
@@ -156,6 +157,12 @@ export class ListingsService {
     }
     if (startBefore) {
       qb.andWhere('listing.startDateTime <= :startBefore', { startBefore: new Date(startBefore) });
+    }
+    if (hidePastEvents) {
+      qb.andWhere(
+        "(listing.type != 'EVENT' OR listing.\"startDateTime\" IS NULL OR listing.\"startDateTime\" >= :now)",
+        { now: new Date() },
+      );
     }
 
     qb.orderBy('listing.createdAt', 'DESC').skip(offset).take(limit);

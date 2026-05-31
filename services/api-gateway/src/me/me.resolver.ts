@@ -49,8 +49,18 @@ import {
   updateFeatureFlagClient,
   getHostApplication,
   updateUserPhone,
+  markEmailVerifiedClient,
+  markPhoneVerifiedClient,
+  selfUpgradePremiumClient,
+  checkGoing,
+  shareExperience,
+  getMyExperiences,
+  deleteExperience,
+  getListingExperiences,
+  getAllHosts,
+  getHostProfile,
 } from '../identity/identity.client';
-import { getListing, addAuditLog, searchListings, approvedCountByHost } from '../listings/listings.client';
+import { getListing, addAuditLog, searchListings, approvedCountByHost, listingsByHost } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
 import { Listing } from '../listings/listings.resolver';
 
@@ -72,6 +82,9 @@ class Me {
   @Field({ nullable: true }) displayName?: string;
   @Field({ nullable: true }) avatarUrl?: string;
   @Field(() => AiUsageType) aiUsage!: AiUsageType;
+  @Field({ nullable: true }) emailVerifiedAt?: string;
+  @Field({ nullable: true }) phoneVerifiedAt?: string;
+  @Field({ nullable: true }) phone?: string;
 }
 
 @ObjectType()
@@ -154,10 +167,66 @@ class ItineraryItem {
   @Field() plannedDate!: string;
   @Field({ nullable: true }) note?: string;
   @Field() createdAt!: string;
+  @Field() isGoingEntry!: boolean;
   @Field({ nullable: true }) listingTitle?: string;
   @Field({ nullable: true }) listingImageUrl?: string;
   @Field({ nullable: true }) listingType?: string;
   @Field({ nullable: true }) listingPlaceName?: string;
+}
+
+@ObjectType()
+class ExperienceUser {
+  @Field() firebaseUid!: string;
+  @Field({ nullable: true }) displayName?: string;
+  @Field({ nullable: true }) avatarUrl?: string;
+}
+
+@ObjectType()
+class EventExperience {
+  @Field(() => ID) id!: string;
+  @Field() listingId!: string;
+  @Field(() => Int) rating!: number;
+  @Field() text!: string;
+  @Field(() => [String]) imageUrls!: string[];
+  @Field() createdAt!: string;
+  @Field({ nullable: true }) user?: ExperienceUser;
+}
+
+@ObjectType()
+class HostCard {
+  @Field() firebaseUid!: string;
+  @Field({ nullable: true }) displayName?: string;
+  @Field({ nullable: true }) avatarUrl?: string;
+  @Field() badgeLevel!: string;
+  @Field(() => Int) approvedCount!: number;
+  @Field() createdAt!: string;
+}
+
+@ObjectType()
+class AdminHostDetail {
+  @Field() firebaseUid!: string;
+  @Field({ nullable: true }) displayName?: string;
+  @Field({ nullable: true }) avatarUrl?: string;
+  @Field({ nullable: true }) email?: string;
+  @Field() createdAt!: string;
+  @Field() badgeLevel!: string;
+  @Field(() => Int) approvedCount!: number;
+  @Field(() => Int) totalViews!: number;
+  @Field(() => [Listing]) upcomingEvents!: Listing[];
+  @Field(() => [Listing]) pastEvents!: Listing[];
+}
+
+@ObjectType()
+class HostPublicProfile {
+  @Field() firebaseUid!: string;
+  @Field({ nullable: true }) displayName?: string;
+  @Field({ nullable: true }) avatarUrl?: string;
+  @Field() createdAt!: string;
+  @Field() badgeLevel!: string;
+  @Field(() => Int) approvedCount!: number;
+  @Field(() => [Listing]) upcomingEvents!: Listing[];
+  @Field(() => [Listing]) pastEvents!: Listing[];
+  @Field(() => [EventExperience]) pastExperiences!: EventExperience[];
 }
 
 @InputType()
@@ -229,7 +298,7 @@ export class MeResolver {
   async me(@CurrentUser() user: admin.auth.DecodedIdToken) {
     await upsertUser(user.uid, user.email);
     const [profile, usage] = await Promise.all([
-      getUser(user.uid) as Promise<UserProfile & { displayName?: string; avatarUrl?: string; subscriptionTier?: string; isPremium?: boolean }>,
+      getUser(user.uid) as Promise<UserProfile & { displayName?: string; avatarUrl?: string; subscriptionTier?: string; isPremium?: boolean; emailVerifiedAt?: string; phoneVerifiedAt?: string; phone?: string }>,
       getAiUsage(user.uid).catch(() => null),
     ]);
     const tier = profile.subscriptionTier ?? 'FREE';
@@ -243,6 +312,9 @@ export class MeResolver {
       isPremium: profile.isPremium || profile.role === 'HOST' || profile.role === 'ADMIN',
       displayName: profile.displayName ?? null,
       avatarUrl: profile.avatarUrl ?? null,
+      phone: profile.phone ?? null,
+      emailVerifiedAt: profile.emailVerifiedAt ?? null,
+      phoneVerifiedAt: profile.phoneVerifiedAt ?? null,
       aiUsage: {
         requestsUsed: used,
         monthlyLimit: limit,
@@ -666,5 +738,217 @@ export class MeResolver {
   async approvedCount(@Parent() user: UserRecord): Promise<number> {
     if (user.role !== 'HOST' && user.role !== 'ADMIN') return 0;
     return approvedCountByHost(user.firebaseUid);
+  }
+
+  // ── F2: Premium Verification ─────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async markEmailVerified(@CurrentUser() user: admin.auth.DecodedIdToken): Promise<boolean> {
+    const firebaseUser = await admin.auth().getUser(user.uid);
+    if (!firebaseUser.emailVerified) throw new Error('Email is not verified yet. Please check your inbox.');
+    await markEmailVerifiedClient(user.uid);
+    return true;
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async markPhoneVerified(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('phone') phone: string,
+  ): Promise<boolean> {
+    await markPhoneVerifiedClient(user.uid, phone);
+    return true;
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Me)
+  async selfUpgradeToPremium(@CurrentUser() user: admin.auth.DecodedIdToken) {
+    const result = (await selfUpgradePremiumClient(user.uid)) as any;
+    const [profile, usage] = await Promise.all([
+      getUser(user.uid) as Promise<any>,
+      getAiUsage(user.uid).catch(() => null),
+    ]);
+    const tier = profile.subscriptionTier ?? 'PREMIUM';
+    const limit = computeLimit(profile.role, tier);
+    const used = usage?.requestsUsed ?? 0;
+    return {
+      firebaseUid: profile.firebaseUid,
+      email: profile.email ?? null,
+      role: profile.role,
+      subscriptionTier: tier,
+      isPremium: true,
+      displayName: profile.displayName ?? null,
+      avatarUrl: profile.avatarUrl ?? null,
+      phone: profile.phone ?? null,
+      emailVerifiedAt: result.emailVerifiedAt ?? null,
+      phoneVerifiedAt: result.phoneVerifiedAt ?? null,
+      aiUsage: { requestsUsed: used, monthlyLimit: limit, remaining: Math.max(0, limit - used), resetAt: usage?.resetAt ?? new Date().toISOString() },
+    };
+  }
+
+  // ── F4: "I'm Going" ──────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Query(() => Boolean)
+  async isGoing(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('listingId', { type: () => ID }) listingId: string,
+  ): Promise<boolean> {
+    const result = await checkGoing(user.uid, listingId);
+    return result.isGoing;
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => ItineraryItem)
+  async markGoing(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('listingId', { type: () => ID }) listingId: string,
+  ) {
+    const existing = await checkGoing(user.uid, listingId);
+    if (existing.isGoing && existing.itemId) {
+      const items = (await getItinerary(user.uid)) as any[];
+      const item = items.find((i: any) => i.id === existing.itemId);
+      if (item) return { ...item, listingTitle: null, listingImageUrl: null, listingType: null, listingPlaceName: null };
+    }
+    const listing = (await getListing(listingId)) as any;
+    const plannedDate = listing?.startDateTime ?? new Date().toISOString();
+    const item = (await addToItinerary(user.uid, listingId, plannedDate, undefined, true)) as any;
+    try {
+      const l = listing as any;
+      const dateStr = new Date(plannedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      void createNotification(user.uid, '🎫 Marked as Going', `You\'re going to "${l?.title ?? 'an event'}" on ${dateStr}.`, 'ITINERARY');
+    } catch {}
+    return { ...item, listingTitle: listing?.title ?? null, listingImageUrl: listing?.imageUrl ?? null, listingType: listing?.type ?? null, listingPlaceName: listing?.placeName ?? null };
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async unmarkGoing(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('listingId', { type: () => ID }) listingId: string,
+  ): Promise<boolean> {
+    const existing = await checkGoing(user.uid, listingId);
+    if (existing.isGoing && existing.itemId) {
+      await removeFromItinerary(existing.itemId);
+    }
+    return true;
+  }
+
+  // ── F5: Experience Sharing ────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => EventExperience)
+  async shareExperience(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('listingId', { type: () => ID }) listingId: string,
+    @Args('rating', { type: () => Int }) rating: number,
+    @Args('text') text: string,
+    @Args('imageUrls', { type: () => [String], nullable: true, defaultValue: [] }) imageUrls: string[],
+  ) {
+    return (await shareExperience(user.uid, listingId, rating, text, imageUrls)) as EventExperience;
+  }
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async deleteMyExperience(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('id', { type: () => ID }) id: string,
+  ): Promise<boolean> {
+    await deleteExperience(user.uid, id);
+    return true;
+  }
+
+  @UseGuards(AuthGuard)
+  @Query(() => [EventExperience])
+  async myExperiences(@CurrentUser() user: admin.auth.DecodedIdToken) {
+    return (await getMyExperiences(user.uid)) as EventExperience[];
+  }
+
+  @Query(() => [EventExperience])
+  async listingExperiences(@Args('listingId', { type: () => ID }) listingId: string) {
+    return (await getListingExperiences(listingId)) as EventExperience[];
+  }
+
+  // ── F3: Admin Host Detail ─────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => AdminHostDetail)
+  async adminHostDetail(@Args('firebaseUid') firebaseUid: string): Promise<AdminHostDetail> {
+    const [userProfile, listings, approvedCount] = await Promise.all([
+      getHostProfile(firebaseUid) as Promise<any>,
+      listingsByHost(firebaseUid) as Promise<any[]>,
+      approvedCountByHost(firebaseUid),
+    ]);
+    const now = new Date();
+    const upcomingEvents = listings.filter(
+      (l: any) => l.type !== 'EVENT' || !l.startDateTime || new Date(l.startDateTime) >= now,
+    );
+    const pastEvents = listings.filter(
+      (l: any) => l.type === 'EVENT' && l.startDateTime && new Date(l.startDateTime) < now,
+    );
+    const totalViews = listings.reduce((sum: number, l: any) => sum + (l.viewCount ?? 0), 0);
+    return {
+      firebaseUid: userProfile.firebaseUid,
+      displayName: userProfile.displayName ?? null,
+      avatarUrl: userProfile.avatarUrl ?? null,
+      email: userProfile.email ?? null,
+      createdAt: userProfile.createdAt,
+      badgeLevel: computeBadgeLevel(approvedCount),
+      approvedCount,
+      totalViews,
+      upcomingEvents,
+      pastEvents,
+    };
+  }
+
+  // ── F6: Host Discovery ────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Query(() => [HostCard])
+  async allHosts(
+    @Args('limit', { nullable: true, type: () => Int }) limit?: number,
+    @Args('offset', { nullable: true, type: () => Int }) offset?: number,
+  ): Promise<HostCard[]> {
+    const hosts = (await getAllHosts(limit, offset)) as any[];
+    return Promise.all(
+      hosts.map(async (h: any) => {
+        const count = await approvedCountByHost(h.firebaseUid);
+        return { ...h, badgeLevel: computeBadgeLevel(count), approvedCount: count };
+      }),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @Query(() => HostPublicProfile)
+  async hostPublicProfile(@Args('firebaseUid') firebaseUid: string): Promise<HostPublicProfile> {
+    const [userProfile, listings, approvedCount] = await Promise.all([
+      getHostProfile(firebaseUid) as Promise<any>,
+      listingsByHost(firebaseUid) as Promise<any[]>,
+      approvedCountByHost(firebaseUid),
+    ]);
+    const approvedListings = listings.filter((l: any) => l.status === 'APPROVED');
+    const now = new Date();
+    const upcomingEvents = approvedListings.filter(
+      (l: any) => l.type !== 'EVENT' || !l.startDateTime || new Date(l.startDateTime) >= now,
+    );
+    const pastEvents = approvedListings.filter(
+      (l: any) => l.type === 'EVENT' && l.startDateTime && new Date(l.startDateTime) < now,
+    );
+    const experiencesByListing = await Promise.all(
+      pastEvents.map((l: any) => getListingExperiences(l.id).catch(() => [])),
+    );
+    const pastExperiences = (experiencesByListing.flat() as any[]).filter(Boolean);
+    return {
+      firebaseUid: userProfile.firebaseUid,
+      displayName: userProfile.displayName ?? null,
+      avatarUrl: userProfile.avatarUrl ?? null,
+      createdAt: userProfile.createdAt,
+      badgeLevel: computeBadgeLevel(approvedCount),
+      approvedCount,
+      upcomingEvents,
+      pastEvents,
+      pastExperiences,
+    };
   }
 }
