@@ -73,13 +73,22 @@ type HostBadgeResult {
   badgeLevel: String!
 }
 
+type AiUsageType {
+  requestsUsed: Int!
+  monthlyLimit: Int!
+  remaining: Int!
+  resetAt: String!
+}
+
 type Me {
   firebaseUid: String!
   email: String
   role: String!
+  subscriptionTier: String!
   isPremium: Boolean!
   displayName: String
   avatarUrl: String
+  aiUsage: AiUsageType!
 }
 
 type AppNotification {
@@ -201,6 +210,7 @@ type Mutation {
   registerDeviceToken(token: String!): Boolean!
   updateUserLocation(lat: Float!, lng: Float!): Boolean!
   planItinerary(prompt: String!, history: [ChatMessageInput!] = [], listingId: ID): PlanResult!
+  adminUpdateUserSubscription(targetFirebaseUid: String!, tier: String!): Boolean!
   addToItinerary(listingId: ID!, plannedDate: String!, note: String): ItineraryItem!
   updateItineraryNote(itemId: ID!, note: String!): ItineraryItem!
   removeFromItinerary(itemId: ID!): Boolean!

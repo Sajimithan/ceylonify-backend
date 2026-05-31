@@ -42,19 +42,32 @@ import {
   submitHostApplication,
   adminPendingHostApplications,
   adminReviewHostApplication,
+  getAiUsage,
+  incrementAiUsage,
+  updateSubscription,
 } from '../identity/identity.client';
 import { getListing, addAuditLog, searchListings, approvedCountByHost } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
 import { Listing } from '../listings/listings.resolver';
 
 @ObjectType()
+class AiUsageType {
+  @Field(() => Int) requestsUsed!: number;
+  @Field(() => Int) monthlyLimit!: number;
+  @Field(() => Int) remaining!: number;
+  @Field() resetAt!: string;
+}
+
+@ObjectType()
 class Me {
   @Field() firebaseUid!: string;
   @Field({ nullable: true }) email?: string;
   @Field() role!: string;
+  @Field() subscriptionTier!: string;
   @Field() isPremium!: boolean;
   @Field({ nullable: true }) displayName?: string;
   @Field({ nullable: true }) avatarUrl?: string;
+  @Field(() => AiUsageType) aiUsage!: AiUsageType;
 }
 
 @ObjectType()
@@ -144,6 +157,13 @@ function computeBadgeLevel(count: number): string {
   return 'NONE';
 }
 
+function computeLimit(role: string, tier: string): number {
+  if (role === 'ADMIN') return 9999;
+  if (role === 'HOST')  return 50;
+  if (tier === 'PREMIUM') return 30;
+  return 5;
+}
+
 @ObjectType()
 class HostApplicationRecord {
   @Field() id!: string;
@@ -191,14 +211,27 @@ export class MeResolver {
   @Query(() => Me)
   async me(@CurrentUser() user: admin.auth.DecodedIdToken) {
     await upsertUser(user.uid, user.email);
-    const profile = (await getUser(user.uid)) as UserProfile & { displayName?: string; avatarUrl?: string };
+    const [profile, usage] = await Promise.all([
+      getUser(user.uid) as Promise<UserProfile & { displayName?: string; avatarUrl?: string; subscriptionTier?: string; isPremium?: boolean }>,
+      getAiUsage(user.uid).catch(() => null),
+    ]);
+    const tier = profile.subscriptionTier ?? 'FREE';
+    const limit = computeLimit(profile.role, tier);
+    const used = usage?.requestsUsed ?? 0;
     return {
       firebaseUid: profile.firebaseUid,
       email: profile.email ?? null,
       role: profile.role,
-      isPremium: profile.role === 'HOST' || profile.role === 'ADMIN',
+      subscriptionTier: tier,
+      isPremium: profile.isPremium || profile.role === 'HOST' || profile.role === 'ADMIN',
       displayName: profile.displayName ?? null,
       avatarUrl: profile.avatarUrl ?? null,
+      aiUsage: {
+        requestsUsed: used,
+        monthlyLimit: limit,
+        remaining: Math.max(0, limit - used),
+        resetAt: usage?.resetAt ?? new Date().toISOString(),
+      },
     };
   }
 
@@ -210,14 +243,27 @@ export class MeResolver {
     @Args('avatarUrl', { nullable: true }) avatarUrl?: string,
   ) {
     await updateUserProfile(user.uid, { displayName, avatarUrl });
-    const profile = (await getUser(user.uid)) as UserProfile & { displayName?: string; avatarUrl?: string };
+    const [profile, usage] = await Promise.all([
+      getUser(user.uid) as Promise<UserProfile & { displayName?: string; avatarUrl?: string; subscriptionTier?: string; isPremium?: boolean }>,
+      getAiUsage(user.uid).catch(() => null),
+    ]);
+    const tier = profile.subscriptionTier ?? 'FREE';
+    const limit = computeLimit(profile.role, tier);
+    const used = usage?.requestsUsed ?? 0;
     return {
       firebaseUid: profile.firebaseUid,
       email: profile.email ?? null,
       role: profile.role,
-      isPremium: profile.role === 'HOST' || profile.role === 'ADMIN',
+      subscriptionTier: tier,
+      isPremium: profile.isPremium || profile.role === 'HOST' || profile.role === 'ADMIN',
       displayName: profile.displayName ?? null,
       avatarUrl: profile.avatarUrl ?? null,
+      aiUsage: {
+        requestsUsed: used,
+        monthlyLimit: limit,
+        remaining: Math.max(0, limit - used),
+        resetAt: usage?.resetAt ?? new Date().toISOString(),
+      },
     };
   }
 
@@ -345,11 +391,25 @@ export class MeResolver {
   @UseGuards(AuthGuard)
   @Mutation(() => PlanResult)
   async planItinerary(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
     @Args('prompt') prompt: string,
     @Args('history', { type: () => [ChatMessageInput], nullable: true, defaultValue: [] })
     history: ChatMessageInput[],
     @Args('listingId', { nullable: true, type: () => ID }) listingId?: string,
   ): Promise<{ text: string; listings: PlanListing[] }> {
+    // Quota enforcement
+    const usage = await getAiUsage(user.uid).catch(() => null);
+    const role = (usage?.role ?? 'TRAVELER');
+    const tier = (usage?.subscriptionTier ?? 'FREE');
+    const limit = computeLimit(role, tier);
+    const used = usage?.requestsUsed ?? 0;
+    if (used >= limit) {
+      throw new Error(
+        `QUOTA_EXCEEDED: You have used ${used}/${limit} AI requests this month. ` +
+        (tier === 'FREE' ? 'Upgrade to Premium for more requests.' : 'Your monthly quota will reset next month.'),
+      );
+    }
+
     // Fetch the specific listing from the map card (becomes primary context)
     let primaryListing: any = null;
     if (listingId) {
@@ -403,7 +463,20 @@ export class MeResolver {
       ...history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user' as const, content: prompt },
     ];
-    return aiPlanItinerary(messages, listingsContext.length ? listingsContext : undefined);
+    const result = await aiPlanItinerary(messages, listingsContext.length ? listingsContext : undefined);
+    // Increment usage counter after successful AI call (fire-and-forget)
+    void incrementAiUsage(user.uid, result.tokensUsed ?? 0);
+    return result;
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminUpdateUserSubscription(
+    @Args('targetFirebaseUid') targetFirebaseUid: string,
+    @Args('tier') tier: string,
+  ): Promise<boolean> {
+    await updateSubscription(targetFirebaseUid, tier as 'FREE' | 'PREMIUM');
+    return true;
   }
 
   // ── Itinerary ────────────────────────────────────────────────────────────────

@@ -51,6 +51,7 @@ export type PlanResult = {
     price?: string;
     type: string;
   }>;
+  tokensUsed?: number;
 };
 
 const SYSTEM_PROMPT = `You are the AI travel assistant built into Ceylonify — a Sri Lanka tourism marketplace app. Your ONLY job is to help users plan trips using real experiences listed on Ceylonify.
@@ -142,7 +143,8 @@ export async function planItinerary(
     });
     const rawText = response.choices[0]?.message?.content?.trim() ?? 'Sorry, I could not generate a plan. Please try again.';
     const matchedListings = extractMentionedListings(rawText, listingsContext ?? []);
-    return { text: rawText, listings: matchedListings };
+    const tokensUsed = response.usage?.total_tokens ?? 0;
+    return { text: rawText, listings: matchedListings, tokensUsed };
   } catch {
     return { text: 'Sorry, the AI planner is unavailable right now. Please try again later.', listings: [] };
   }

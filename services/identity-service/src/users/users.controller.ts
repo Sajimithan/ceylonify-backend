@@ -11,7 +11,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Role } from '@prisma/client';
+import { Role, SubscriptionTier } from '@prisma/client';
 
 @Controller('users')
 export class UsersController implements OnModuleInit {
@@ -344,5 +344,72 @@ export class UsersController implements OnModuleInit {
     if (!user) return { ok: true };
     await this.prisma.savedChat.deleteMany({ where: { id: chatId, userId: user.id } });
     return { ok: true };
+  }
+
+  // ── AI Usage ──────────────────────────────────────────────────────────────
+
+  @Get(':firebaseUid/ai-usage')
+  async getAiUsage(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+
+    let usage = await this.prisma.aiUsage.findUnique({ where: { userId: user.id } });
+
+    // Lazy monthly reset: if resetAt is a previous calendar month, reset counters
+    if (usage) {
+      const resetDate = new Date(usage.resetAt);
+      const now = new Date();
+      const isOldMonth =
+        resetDate.getUTCFullYear() < now.getUTCFullYear() ||
+        resetDate.getUTCMonth() < now.getUTCMonth();
+      if (isOldMonth) {
+        usage = await this.prisma.aiUsage.update({
+          where: { userId: user.id },
+          data: { requestsUsed: 0, tokensUsed: 0, resetAt: now },
+        });
+      }
+    }
+
+    return {
+      requestsUsed: usage?.requestsUsed ?? 0,
+      tokensUsed: usage?.tokensUsed ?? 0,
+      resetAt: usage?.resetAt ?? new Date(),
+      subscriptionTier: user.subscriptionTier,
+      isPremium: user.isPremium,
+      role: user.role,
+    };
+  }
+
+  @Post(':firebaseUid/ai-usage/increment')
+  async incrementAiUsage(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { tokensUsed: number },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const tokens = body.tokensUsed ?? 0;
+    return this.prisma.aiUsage.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, requestsUsed: 1, tokensUsed: tokens, resetAt: new Date() },
+      update: { requestsUsed: { increment: 1 }, tokensUsed: { increment: tokens } },
+    });
+  }
+
+  @Patch(':firebaseUid/subscription')
+  async updateSubscription(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { tier: 'FREE' | 'PREMIUM' },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        subscriptionTier: body.tier as SubscriptionTier,
+        isPremium: body.tier === 'PREMIUM',
+      },
+      select: { id: true, firebaseUid: true, subscriptionTier: true, isPremium: true },
+    });
   }
 }

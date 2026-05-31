@@ -13,22 +13,30 @@ enum Role {
   ADMIN
 }
 
+enum SubscriptionTier {
+  FREE
+  PREMIUM
+}
+
 model User {
-  id              String          @id @default(uuid())
-  firebaseUid     String          @unique
-  email           String?
-  displayName     String?
-  avatarUrl       String?
-  role            Role            @default(TRAVELER)
-  fcmToken        String?
-  lastLat         Float?
-  lastLng         Float?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  savedListings   SavedListing[]
-  itineraryItems  ItineraryItem[]
-  notifications   Notification[]
-  savedChats      SavedChat[]
+  id               String           @id @default(uuid())
+  firebaseUid      String           @unique
+  email            String?
+  displayName      String?
+  avatarUrl        String?
+  role             Role             @default(TRAVELER)
+  subscriptionTier SubscriptionTier @default(FREE)
+  isPremium        Boolean          @default(false)
+  fcmToken         String?
+  lastLat          Float?
+  lastLng          Float?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  savedListings    SavedListing[]
+  itineraryItems   ItineraryItem[]
+  notifications    Notification[]
+  savedChats       SavedChat[]
+  aiUsage          AiUsage?
 }
 
 model Notification {
@@ -70,6 +78,15 @@ model ItineraryItem {
   note        String?
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AiUsage {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  requestsUsed Int      @default(0)
+  tokensUsed   Int      @default(0)
+  resetAt      DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model HostApplication {

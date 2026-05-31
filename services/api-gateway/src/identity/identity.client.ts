@@ -224,6 +224,45 @@ export async function markAllNotificationsRead(firebaseUid: string) {
   );
 }
 
+// ── AI Usage ─────────────────────────────────────────────────────────────────
+
+export interface AiUsageResponse {
+  requestsUsed: number;
+  tokensUsed: number;
+  resetAt: string;
+  subscriptionTier: 'FREE' | 'PREMIUM';
+  isPremium: boolean;
+  role: string;
+}
+
+export async function getAiUsage(firebaseUid: string): Promise<AiUsageResponse> {
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.identity}/users/${firebaseUid}/ai-usage`)
+        .then((r) => r.data as AiUsageResponse),
+    'getAiUsage',
+  );
+}
+
+export async function incrementAiUsage(firebaseUid: string, tokensUsed: number): Promise<void> {
+  try {
+    await axios.post(`${SERVICES.identity}/users/${firebaseUid}/ai-usage/increment`, { tokensUsed });
+  } catch {
+    // best effort — never block the AI response
+  }
+}
+
+export async function updateSubscription(firebaseUid: string, tier: 'FREE' | 'PREMIUM'): Promise<void> {
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.identity}/users/${firebaseUid}/subscription`, { tier })
+        .then(() => undefined),
+    'updateSubscription',
+  );
+}
+
 // ── Saved Chats ───────────────────────────────────────────────────────────────
 
 export async function saveChat(firebaseUid: string, name: string, messages: string) {
