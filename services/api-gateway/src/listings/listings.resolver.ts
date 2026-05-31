@@ -81,7 +81,6 @@ export class Listing {
   @Field({ nullable: true }) startDateTime?: string;
   @Field() isPremium!: boolean;
   @Field(() => Int) viewCount!: number;
-  @Field(() => Int, { nullable: true }) goingCount?: number;
 }
 
 @ObjectType()
@@ -467,9 +466,4 @@ export class ListingsResolver {
     return listing.viewCount ?? 0;
   }
 
-  @ResolveField(() => Int, { nullable: true })
-  async goingCount(@Parent() listing: ListingEntity): Promise<number> {
-    if (listing.type !== 'EVENT') return 0;
-    return getGoingCount(listing.id);
-  }
 }

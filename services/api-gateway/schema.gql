@@ -28,7 +28,6 @@ type Listing {
   startDateTime: String
   isPremium: Boolean!
   viewCount: Int!
-  goingCount: Int
 }
 
 type ListingStats {
