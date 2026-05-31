@@ -5,19 +5,26 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { GqlExecutionContext } from '@nestjs/graphql';
+import * as admin from 'firebase-admin';
+import { getUser } from '../identity/identity.client';
+
+interface UserProfile {
+  role: string;
+}
 
 @Injectable()
 export class AdminGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const ctx = GqlExecutionContext.create(context);
-    const request = ctx.getContext<{ req: { user?: { email?: string } } }>()
-      .req;
+    const request = ctx.getContext<{ req: { user?: admin.auth.DecodedIdToken } }>().req;
 
-    const user = request.user;
-    const email = (user?.email || '').toLowerCase();
+    const uid = request.user?.uid;
+    if (!uid) {
+      throw new UnauthorizedException('Not authenticated');
+    }
 
-    const allow = new Set(['admin@test.com']); // ✅ replace
-    if (!allow.has(email)) {
+    const profile = (await getUser(uid)) as UserProfile;
+    if (profile?.role !== 'ADMIN') {
       throw new UnauthorizedException('Admin access required');
     }
     return true;

@@ -71,6 +71,12 @@ export class Listing {
   @Column({ nullable: true })
   rejectReason?: string;
 
+  @Column({ default: false })
+  isPremium!: boolean;
+
+  @Column({ type: 'int', default: 0 })
+  viewCount!: number;
+
   @CreateDateColumn()
   createdAt!: Date;
 

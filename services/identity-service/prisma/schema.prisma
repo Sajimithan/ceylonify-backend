@@ -13,11 +13,132 @@ enum Role {
   ADMIN
 }
 
+enum SubscriptionTier {
+  FREE
+  PREMIUM
+}
+
 model User {
-  id          String   @id @default(uuid())
-  firebaseUid String   @unique
-  email       String?
-  role        Role     @default(TRAVELER)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String           @id @default(uuid())
+  firebaseUid      String           @unique
+  email            String?
+  displayName      String?
+  avatarUrl        String?
+  role             Role             @default(TRAVELER)
+  subscriptionTier SubscriptionTier @default(FREE)
+  isPremium        Boolean          @default(false)
+  fcmToken         String?
+  phone            String?
+  lastLat          Float?
+  lastLng          Float?
+  emailVerifiedAt  DateTime?
+  phoneVerifiedAt  DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  savedListings    SavedListing[]
+  itineraryItems   ItineraryItem[]
+  notifications    Notification[]
+  savedChats       SavedChat[]
+  aiUsage          AiUsage?
+  experiences      EventExperience[]
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  title      String
+  body       String
+  type       String
+  resourceId String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SavedChat {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  messages  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SavedListing {
+  id        String   @id @default(uuid())
+  userId    String
+  listingId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+}
+
+model ItineraryItem {
+  id           String   @id @default(uuid())
+  userId       String
+  listingId    String
+  plannedDate  DateTime
+  note         String?
+  isGoingEntry Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EventExperience {
+  id        String   @id @default(uuid())
+  userId    String
+  listingId String
+  rating    Int
+  text      String
+  imageUrls String[]
+  status    String   @default("APPROVED")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+}
+
+model AiUsage {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  requestsUsed Int      @default(0)
+  tokensUsed   Int      @default(0)
+  resetAt      DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FeatureFlag {
+  key                 String   @id
+  label               String
+  description         String
+  enabledForTravelers Boolean  @default(true)
+  enabledForHosts     Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
+  updatedByAdminUid   String?
+}
+
+model HostApplication {
+  id              String    @id @default(uuid())
+  firebaseUid     String    @unique
+  email           String?
+  hostTypes       String
+  businessName    String?
+  businessAddress String?
+  businessLat     Float?
+  businessLng     Float?
+  phoneNumber     String?
+  licenseNumber   String?
+  idType          String?
+  idDocumentUrl   String?
+  businessDocUrl  String?
+  healthCertUrl   String?
+  licenseDocUrl   String?
+  bankDocUrl      String?
+  status          String    @default("PENDING")
+  submittedAt     DateTime  @default(now())
+  reviewedAt      DateTime?
+  reviewNote      String?
 }

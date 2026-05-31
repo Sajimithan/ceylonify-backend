@@ -25,6 +25,8 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "@prisma/client": "6.19.2",
+    "@types/bad-words": "^3.0.3",
+    "bad-words": "^3.0.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },

@@ -9,27 +9,6 @@ type ServiceHealth {
   data: String
 }
 
-type Me {
-  firebaseUid: String!
-  email: String
-  role: String!
-}
-
-type UserRecord {
-  id: String!
-  firebaseUid: String!
-  email: String
-  role: String!
-  createdAt: String!
-}
-
-type UserStats {
-  total: Float!
-  travelers: Float!
-  hosts: Float!
-  admins: Float!
-}
-
 type Listing {
   id: ID!
   title: String!
@@ -46,6 +25,9 @@ type Listing {
   lng: Float
   createdBy: String
   rejectionReason: String
+  startDateTime: String
+  isPremium: Boolean!
+  viewCount: Int!
 }
 
 type ListingStats {
@@ -55,28 +37,301 @@ type ListingStats {
   rejected: Float!
 }
 
+type SearchResult {
+  listings: [Listing!]!
+  total: Int!
+}
+
+type ListingReport {
+  id: ID!
+  listingId: String!
+  reporterFirebaseUid: String!
+  reason: String!
+  comment: String
+  imageUrls: [String!]
+  status: String!
+  createdAt: String!
+}
+
+type AuditLogEntry {
+  id: ID!
+  action: String!
+  adminFirebaseUid: String!
+  resourceId: String
+  details: String
+  createdAt: String!
+}
+
+type AIModerationResult {
+  safe: Boolean!
+  confidence: Float!
+  flags: [String!]!
+  summary: String!
+}
+
+type HostBadgeResult {
+  approvedCount: Float!
+  badgeLevel: String!
+}
+
+type AiUsageType {
+  requestsUsed: Int!
+  monthlyLimit: Int!
+  remaining: Int!
+  resetAt: String!
+}
+
+type Me {
+  firebaseUid: String!
+  email: String
+  role: String!
+  subscriptionTier: String!
+  isPremium: Boolean!
+  displayName: String
+  avatarUrl: String
+  aiUsage: AiUsageType!
+  emailVerifiedAt: String
+  phoneVerifiedAt: String
+  phone: String
+}
+
+type AppNotification {
+  id: ID!
+  title: String!
+  body: String!
+  type: String!
+  resourceId: String
+  read: Boolean!
+  createdAt: String!
+}
+
+type SavedChat {
+  id: ID!
+  name: String!
+  messages: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type PlanListing {
+  id: ID!
+  title: String!
+  imageUrl: String
+  placeName: String
+  price: String
+  type: String!
+}
+
+type PlanResult {
+  text: String!
+  listings: [PlanListing!]!
+}
+
+type UserRecord {
+  id: String!
+  firebaseUid: String!
+  email: String
+  role: String!
+  createdAt: String!
+  badgeLevel: String
+  approvedCount: Int
+  phone: String
+}
+
+type FeatureFlagType {
+  key: String!
+  label: String!
+  description: String!
+  enabledForTravelers: Boolean!
+  enabledForHosts: Boolean!
+  updatedAt: String!
+  updatedByAdminUid: String
+}
+
+type UserStats {
+  total: Float!
+  travelers: Float!
+  hosts: Float!
+  admins: Float!
+}
+
+type ItineraryItem {
+  id: ID!
+  listingId: String!
+  plannedDate: String!
+  note: String
+  createdAt: String!
+  isGoingEntry: Boolean!
+  listingTitle: String
+  listingImageUrl: String
+  listingType: String
+  listingPlaceName: String
+}
+
+type ExperienceUser {
+  firebaseUid: String!
+  displayName: String
+  avatarUrl: String
+}
+
+type EventExperience {
+  id: ID!
+  listingId: String!
+  rating: Int!
+  text: String!
+  imageUrls: [String!]!
+  createdAt: String!
+  user: ExperienceUser
+}
+
+type HostCard {
+  firebaseUid: String!
+  displayName: String
+  avatarUrl: String
+  badgeLevel: String!
+  approvedCount: Int!
+  createdAt: String!
+}
+
+type AdminHostDetail {
+  firebaseUid: String!
+  displayName: String
+  avatarUrl: String
+  email: String
+  createdAt: String!
+  badgeLevel: String!
+  approvedCount: Int!
+  totalViews: Int!
+  upcomingEvents: [Listing!]!
+  pastEvents: [Listing!]!
+}
+
+type HostPublicProfile {
+  firebaseUid: String!
+  displayName: String
+  avatarUrl: String
+  createdAt: String!
+  badgeLevel: String!
+  approvedCount: Int!
+  upcomingEvents: [Listing!]!
+  pastEvents: [Listing!]!
+  pastExperiences: [EventExperience!]!
+}
+
+type HostApplicationRecord {
+  id: String!
+  firebaseUid: String!
+  email: String
+  hostTypes: String!
+  businessName: String
+  businessAddress: String
+  businessLat: Float
+  businessLng: Float
+  phoneNumber: String
+  licenseNumber: String
+  idType: String
+  idDocumentUrl: String
+  businessDocUrl: String
+  healthCertUrl: String
+  licenseDocUrl: String
+  bankDocUrl: String
+  status: String!
+  submittedAt: String!
+  reviewedAt: String
+  reviewNote: String
+}
+
 type Query {
   ping: String!
   me: Me!
+  savedListings: [Listing!]!
+  myNotifications: [AppNotification!]!
+  savedChats: [SavedChat!]!
+  featureFlags: [FeatureFlagType!]!
+  myItinerary: [ItineraryItem!]!
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
+  adminPendingHostApplications: [HostApplicationRecord!]!
+  isGoing(listingId: ID!): Boolean!
+  myExperiences: [EventExperience!]!
+  listingExperiences(listingId: ID!): [EventExperience!]!
+  adminHostDetail(firebaseUid: String!): AdminHostDetail!
+  allHosts(limit: Int, offset: Int): [HostCard!]!
+  hostPublicProfile(firebaseUid: String!): HostPublicProfile!
   myListings: [Listing!]!
+  adminReports: [ListingReport!]!
+  hostBadge(firebaseUid: String!): HostBadgeResult!
+  searchListings(q: String, category: String, type: String, limit: Int, hidePastEvents: Boolean, offset: Int, startAfter: String, startBefore: String, priceMin: Float, priceMax: Float, sortBy: String, sortOrder: String): SearchResult!
+  nearbyListings(lat: Float!, lng: Float!, radiusKm: Float, limit: Int): [Listing!]!
+  relatedListings(listingId: String!, limit: Int): [Listing!]!
   feed: [Listing!]!
   listing(id: String!): Listing!
   adminAllListings: [Listing!]!
   adminListingStats: ListingStats!
   pendingListings: [Listing!]!
+  adminAuditLogs: [AuditLogEntry!]!
   healthAll: [ServiceHealth!]!
 }
 
 type Mutation {
+  updateProfile(displayName: String, avatarUrl: String): Me!
+  saveListing(listingId: ID!): Boolean!
+  unsaveListing(listingId: ID!): Boolean!
+  markNotificationRead(notificationId: ID!): Boolean!
+  markAllNotificationsRead: Boolean!
+  saveChat(name: String!, messages: String!): SavedChat!
+  deleteSavedChat(chatId: ID!): Boolean!
+  registerDeviceToken(token: String!): Boolean!
+  updateUserLocation(lat: Float!, lng: Float!): Boolean!
+  adminUpdateFeatureFlag(key: String!, enabledForTravelers: Boolean, enabledForHosts: Boolean): Boolean!
+  adminUpdateUserPhone(firebaseUid: String!, phone: String!): Boolean!
+  planItinerary(prompt: String!, history: [ChatMessageInput!] = [], listingId: ID): PlanResult!
+  adminUpdateUserSubscription(targetFirebaseUid: String!, tier: String!): Boolean!
+  addToItinerary(listingId: ID!, plannedDate: String!, note: String): ItineraryItem!
+  updateItineraryNote(itemId: ID!, note: String!): ItineraryItem!
+  removeFromItinerary(itemId: ID!): Boolean!
   adminChangeUserRole(id: String!, role: String!): UserRecord!
+  submitHostApplication(input: SubmitHostApplicationInput!): Boolean!
+  adminReviewHostApplication(firebaseUid: String!, approve: Boolean!, reviewNote: String): Boolean!
+  deleteMyAccount: Boolean!
+  markEmailVerified: Boolean!
+  markPhoneVerified(phone: String!): Boolean!
+  selfUpgradeToPremium: Me!
+  markGoing(listingId: ID!): ItineraryItem!
+  unmarkGoing(listingId: ID!): Boolean!
+  shareExperience(listingId: ID!, rating: Int!, text: String!, imageUrls: [String!] = []): EventExperience!
+  deleteMyExperience(id: ID!): Boolean!
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
   deleteListing(id: String!): Listing!
+  reportListing(listingId: ID!, reason: String!, comment: String, imageUrls: [String!]): Boolean!
+  adminDismissReport(reportId: ID!): Boolean!
+  adminActionReport(reportId: ID!): Boolean!
+  enhanceDescription(text: String!): String!
+  aiReviewListing(title: String!, description: String!): AIModerationResult!
   approveListing(id: ID!): Listing!
   rejectListing(id: ID!, reason: String!): Listing!
-  registerDeviceToken(token: String!): Boolean!
+}
+
+input ChatMessageInput {
+  role: String!
+  content: String!
+}
+
+input SubmitHostApplicationInput {
+  hostTypes: String!
+  businessName: String
+  businessAddress: String
+  businessLat: Float
+  businessLng: Float
+  phoneNumber: String
+  licenseNumber: String
+  idType: String
+  idDocumentUrl: String
+  businessDocUrl: String
+  healthCertUrl: String
+  licenseDocUrl: String
+  bankDocUrl: String
 }
 
 input CreateListingInput {
@@ -91,6 +346,7 @@ input CreateListingInput {
   imageUrl: String
   lat: Float!
   lng: Float!
+  isPremium: Boolean
 }
 
 input UpdateListingInput {
@@ -105,4 +361,5 @@ input UpdateListingInput {
   imageUrl: String
   lat: Float
   lng: Float
+  isPremium: Boolean
 }
