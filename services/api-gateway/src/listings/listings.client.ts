@@ -5,50 +5,79 @@ function toMessage(e: unknown): string {
   if (axios.isAxiosError(e)) {
     const data = e.response?.data as { message?: string } | undefined;
     if (data?.message) return data.message;
+    if (e.code === 'ECONNREFUSED' || e.code === 'ECONNRESET')
+      return 'Listing service is unavailable';
   }
   if (e instanceof Error) return e.message;
   return 'Request failed';
 }
 
-export async function pendingListings() {
+async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   try {
-    const res = await axios.get(`${SERVICES.listing}/listings/pending`);
-    return res.data as unknown;
+    return await fn();
   } catch (e) {
-    throw new Error(toMessage(e));
+    const isTransient =
+      axios.isAxiosError(e) &&
+      (!e.response || e.response.status >= 500 || e.code === 'ECONNREFUSED');
+    if (isTransient) {
+      await new Promise((r) => setTimeout(r, 5000));
+      try {
+        return await fn();
+      } catch (e2) {
+        throw new Error(`[${label}] ${toMessage(e2)}`);
+      }
+    }
+    throw new Error(`[${label}] ${toMessage(e)}`);
   }
+}
+
+export async function pendingListings() {
+  return withRetry(
+    () => axios.get(`${SERVICES.listing}/listings/pending`).then((r) => r.data as unknown),
+    'pendingListings',
+  );
 }
 
 export async function approveListing(id: string, adminUid?: string) {
-  try {
-    const res = await axios.patch(
-      `${SERVICES.listing}/listings/${id}/approve`,
-      {},
-      adminUid ? { headers: { 'x-admin-uid': adminUid } } : {},
-    );
-    return res.data as unknown;
-  } catch (e) {
-    throw new Error(toMessage(e));
-  }
+  return withRetry(
+    () =>
+      axios
+        .patch(
+          `${SERVICES.listing}/listings/${id}/approve`,
+          {},
+          adminUid ? { headers: { 'x-admin-uid': adminUid } } : {},
+        )
+        .then((r) => r.data as unknown),
+    'approveListing',
+  );
 }
 
 export async function rejectListing(id: string, reason: string, adminUid?: string) {
-  try {
-    const res = await axios.patch(
-      `${SERVICES.listing}/listings/${id}/reject`,
-      { reason },
-      adminUid ? { headers: { 'x-admin-uid': adminUid } } : {},
-    );
-    return res.data as unknown;
-  } catch (e) {
-    throw new Error(toMessage(e));
-  }
+  return withRetry(
+    () =>
+      axios
+        .patch(
+          `${SERVICES.listing}/listings/${id}/reject`,
+          { reason },
+          adminUid ? { headers: { 'x-admin-uid': adminUid } } : {},
+        )
+        .then((r) => r.data as unknown),
+    'rejectListing',
+  );
 }
 
-export async function addAuditLog(action: string, adminFirebaseUid: string, resourceId?: string, details?: string) {
+export async function addAuditLog(
+  action: string,
+  adminFirebaseUid: string,
+  resourceId?: string,
+  details?: string,
+) {
   try {
     await axios.post(`${SERVICES.listing}/listings/audit`, {
-      action, adminFirebaseUid, resourceId, details,
+      action,
+      adminFirebaseUid,
+      resourceId,
+      details,
     });
   } catch {
     // best effort
@@ -56,60 +85,86 @@ export async function addAuditLog(action: string, adminFirebaseUid: string, reso
 }
 
 export async function adminGetAuditLogs() {
-  try {
-    const res = await axios.get(`${SERVICES.listing}/listings/audit/all`);
-    return res.data as unknown;
-  } catch (e) {
-    throw new Error(toMessage(e));
-  }
+  return withRetry(
+    () => axios.get(`${SERVICES.listing}/listings/audit/all`).then((r) => r.data as unknown),
+    'adminGetAuditLogs',
+  );
 }
 
 export async function createListing(uid: string, input: any) {
-  const res = await axios.post(`${SERVICES.listing}/listings`, input, {
-    headers: { 'x-user-uid': uid },
-  });
-  return res.data as unknown;
+  return withRetry(
+    () =>
+      axios
+        .post(`${SERVICES.listing}/listings`, input, {
+          headers: { 'x-user-uid': uid },
+        })
+        .then((r) => r.data as unknown),
+    'createListing',
+  );
 }
 
 export async function myListings(uid: string) {
-  const res = await axios.get(`${SERVICES.listing}/listings/me`, {
-    headers: { 'x-user-uid': uid },
-  });
-  return res.data as unknown;
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.listing}/listings/me`, {
+          headers: { 'x-user-uid': uid },
+        })
+        .then((r) => r.data as unknown),
+    'myListings',
+  );
 }
 
 export async function feed() {
-  const res = await axios.get(`${SERVICES.listing}/listings/feed`);
-  return res.data as unknown;
+  return withRetry(
+    () => axios.get(`${SERVICES.listing}/listings/feed`).then((r) => r.data as unknown),
+    'feed',
+  );
 }
 
 export async function adminAllListings() {
-  const res = await axios.get(`${SERVICES.listing}/listings/all`);
-  return res.data as unknown;
+  return withRetry(
+    () => axios.get(`${SERVICES.listing}/listings/all`).then((r) => r.data as unknown),
+    'adminAllListings',
+  );
 }
 
 export async function adminListingStats() {
-  const res = await axios.get(`${SERVICES.listing}/listings/stats`);
-  return res.data as unknown;
+  return withRetry(
+    () => axios.get(`${SERVICES.listing}/listings/stats`).then((r) => r.data as unknown),
+    'adminListingStats',
+  );
 }
 
 export async function updateListing(uid: string, id: string, input: any) {
-  const res = await axios.patch(`${SERVICES.listing}/listings/${id}`, input, {
-    headers: { 'x-user-uid': uid },
-  });
-  return res.data as unknown;
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.listing}/listings/${id}`, input, {
+          headers: { 'x-user-uid': uid },
+        })
+        .then((r) => r.data as unknown),
+    'updateListing',
+  );
 }
 
 export async function deleteListing(uid: string, id: string) {
-  const res = await axios.delete(`${SERVICES.listing}/listings/${id}`, {
-    headers: { 'x-user-uid': uid },
-  });
-  return res.data as unknown;
+  return withRetry(
+    () =>
+      axios
+        .delete(`${SERVICES.listing}/listings/${id}`, {
+          headers: { 'x-user-uid': uid },
+        })
+        .then((r) => r.data as unknown),
+    'deleteListing',
+  );
 }
 
 export async function getListing(id: string) {
-  const res = await axios.get(`${SERVICES.listing}/listings/${id}`);
-  return res.data as unknown;
+  return withRetry(
+    () => axios.get(`${SERVICES.listing}/listings/${id}`).then((r) => r.data as unknown),
+    'getListing',
+  );
 }
 
 export async function searchListings(params: {
@@ -131,10 +186,13 @@ export async function searchListings(params: {
   if (params.includePremium === false) query.set('includePremium', 'false');
   if (params.startAfter) query.set('startAfter', params.startAfter);
   if (params.startBefore) query.set('startBefore', params.startBefore);
-  const res = await axios.get(
-    `${SERVICES.listing}/listings/search?${query.toString()}`,
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.listing}/listings/search?${query.toString()}`)
+        .then((r) => r.data as unknown),
+    'searchListings',
   );
-  return res.data as unknown;
 }
 
 export async function nearbyListings(params: {
@@ -148,8 +206,13 @@ export async function nearbyListings(params: {
   query.set('lng', String(params.lng));
   if (params.radiusKm !== undefined) query.set('radiusKm', String(params.radiusKm));
   if (params.limit !== undefined) query.set('limit', String(params.limit));
-  const res = await axios.get(`${SERVICES.listing}/listings/nearby?${query.toString()}`);
-  return res.data as unknown;
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.listing}/listings/nearby?${query.toString()}`)
+        .then((r) => r.data as unknown),
+    'nearbyListings',
+  );
 }
 
 export async function reportListing(
@@ -158,54 +221,52 @@ export async function reportListing(
   reason: string,
   comment?: string,
 ) {
-  try {
-    const res = await axios.post(
-      `${SERVICES.listing}/listings/${listingId}/report`,
-      { reason, comment },
-      { headers: { 'x-user-uid': uid } },
-    );
-    return res.data as unknown;
-  } catch (e) {
-    throw new Error(toMessage(e));
-  }
+  return withRetry(
+    () =>
+      axios
+        .post(
+          `${SERVICES.listing}/listings/${listingId}/report`,
+          { reason, comment },
+          { headers: { 'x-user-uid': uid } },
+        )
+        .then((r) => r.data as unknown),
+    'reportListing',
+  );
 }
 
 export async function adminGetReports() {
-  try {
-    const res = await axios.get(`${SERVICES.listing}/listings/reports/all`);
-    return res.data as unknown;
-  } catch (e) {
-    throw new Error(toMessage(e));
-  }
+  return withRetry(
+    () =>
+      axios.get(`${SERVICES.listing}/listings/reports/all`).then((r) => r.data as unknown),
+    'adminGetReports',
+  );
 }
 
 export async function adminDismissReport(reportId: string) {
-  try {
-    const res = await axios.patch(
-      `${SERVICES.listing}/listings/reports/${reportId}/dismiss`,
-      {},
-    );
-    return res.data as unknown;
-  } catch (e) {
-    throw new Error(toMessage(e));
-  }
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.listing}/listings/reports/${reportId}/dismiss`, {})
+        .then((r) => r.data as unknown),
+    'adminDismissReport',
+  );
 }
 
 export async function adminActionReport(reportId: string) {
-  try {
-    const res = await axios.patch(
-      `${SERVICES.listing}/listings/reports/${reportId}/action`,
-      {},
-    );
-    return res.data as unknown;
-  } catch (e) {
-    throw new Error(toMessage(e));
-  }
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.listing}/listings/reports/${reportId}/action`, {})
+        .then((r) => r.data as unknown),
+    'adminActionReport',
+  );
 }
 
 export async function approvedCountByHost(hostUid: string): Promise<number> {
   try {
-    const res = await axios.get(`${SERVICES.listing}/listings/approved-count?hostUid=${encodeURIComponent(hostUid)}`);
+    const res = await axios.get(
+      `${SERVICES.listing}/listings/approved-count?hostUid=${encodeURIComponent(hostUid)}`,
+    );
     return (res.data as { count: number }).count ?? 0;
   } catch {
     return 0;
