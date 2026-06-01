@@ -87,12 +87,15 @@ type Me {
   role: String!
   subscriptionTier: String!
   isPremium: Boolean!
+  isSuspended: Boolean!
+  isSuperAdmin: Boolean!
   displayName: String
   avatarUrl: String
   aiUsage: AiUsageType!
   emailVerifiedAt: String
   phoneVerifiedAt: String
   phone: String
+  subscriptionExpiresAt: String
 }
 
 type AppNotification {
@@ -136,6 +139,16 @@ type UserRecord {
   badgeLevel: String
   approvedCount: Int
   phone: String
+  isSuspended: Boolean
+  subscriptionExpiresAt: String
+}
+
+type SubscriptionEventType {
+  id: ID!
+  fromTier: String!
+  toTier: String!
+  changedAt: String!
+  changedBy: String!
 }
 
 type FeatureFlagType {
@@ -251,6 +264,8 @@ type Query {
   myItinerary: [ItineraryItem!]!
   adminAllUsers: [UserRecord!]!
   adminUserStats: UserStats!
+  myHostApplication: HostApplicationRecord
+  adminGetHostApplication(firebaseUid: String!): HostApplicationRecord
   adminPendingHostApplications: [HostApplicationRecord!]!
   isGoing(listingId: ID!): Boolean!
   myExperiences: [EventExperience!]!
@@ -258,6 +273,7 @@ type Query {
   adminHostDetail(firebaseUid: String!): AdminHostDetail!
   allHosts(limit: Int, offset: Int): [HostCard!]!
   hostPublicProfile(firebaseUid: String!): HostPublicProfile!
+  adminSubscriptionHistory(firebaseUid: String!): [SubscriptionEventType!]!
   myListings: [Listing!]!
   adminReports: [ListingReport!]!
   hostBadge(firebaseUid: String!): HostBadgeResult!
@@ -301,6 +317,11 @@ type Mutation {
   unmarkGoing(listingId: ID!): Boolean!
   shareExperience(listingId: ID!, rating: Int!, text: String!, imageUrls: [String!] = []): EventExperience!
   deleteMyExperience(id: ID!): Boolean!
+  adminSuspendUser(firebaseUid: String!): Boolean!
+  adminActivateUser(firebaseUid: String!): Boolean!
+  adminDeleteUser(firebaseUid: String!): Boolean!
+  adminSuspendListing(id: String!): Boolean!
+  adminBroadcastAnnouncement(title: String!, body: String!): Int!
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
   deleteListing(id: String!): Listing!
@@ -311,6 +332,8 @@ type Mutation {
   aiReviewListing(title: String!, description: String!): AIModerationResult!
   approveListing(id: ID!): Listing!
   rejectListing(id: ID!, reason: String!): Listing!
+  forgotPassword(email: String!): Boolean!
+  adminCreateAdminAccount(email: String!, password: String!): Boolean!
 }
 
 input ChatMessageInput {

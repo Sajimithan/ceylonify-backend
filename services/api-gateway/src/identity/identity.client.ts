@@ -1,9 +1,11 @@
 import axios from 'axios';
+import { BadRequestException } from '@nestjs/common';
 import { SERVICES } from '../config/services';
 
 function toMessage(e: unknown): string {
   if (axios.isAxiosError(e)) {
-    const data = e.response?.data as { message?: string } | undefined;
+    const data = e.response?.data as { message?: string | string[] } | undefined;
+    if (Array.isArray(data?.message)) return data!.message.join(', ');
     if (data?.message) return data.message;
     if (e.code === 'ECONNREFUSED' || e.code === 'ECONNRESET')
       return 'Identity service is unavailable';
@@ -16,15 +18,19 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   try {
     return await fn();
   } catch (e) {
-    const isTransient =
-      axios.isAxiosError(e) &&
-      (!e.response || e.response.status >= 500 || e.code === 'ECONNREFUSED');
-    if (isTransient) {
-      await new Promise((r) => setTimeout(r, 5000));
-      try {
-        return await fn();
-      } catch (e2) {
-        throw new Error(`[${label}] ${toMessage(e2)}`);
+    if (axios.isAxiosError(e)) {
+      const status = e.response?.status;
+      if (status && status >= 400 && status < 500) {
+        throw new BadRequestException(toMessage(e));
+      }
+      const isTransient = !e.response || status! >= 500 || e.code === 'ECONNREFUSED';
+      if (isTransient) {
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          return await fn();
+        } catch (e2) {
+          throw new Error(`[${label}] ${toMessage(e2)}`);
+        }
       }
     }
     throw new Error(`[${label}] ${toMessage(e)}`);
@@ -364,6 +370,60 @@ export async function updateUserLocation(uid: string, lat: number, lng: number) 
   } catch {
     // best effort
   }
+}
+
+// ── P3.1: Account Suspension ──────────────────────────────────────────────────
+
+export async function suspendUser(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.identity}/users/${firebaseUid}/suspend`)
+        .then((r) => r.data as unknown),
+    'suspendUser',
+  );
+}
+
+export async function activateUser(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.identity}/users/${firebaseUid}/activate`)
+        .then((r) => r.data as unknown),
+    'activateUser',
+  );
+}
+
+// ── P3.4: Announcements ───────────────────────────────────────────────────────
+
+export async function broadcastNotification(title: string, body: string): Promise<{ sent: number }> {
+  try {
+    const res = await axios.post(`${SERVICES.identity}/users/broadcast-notification`, { title, body });
+    return res.data as { sent: number };
+  } catch {
+    return { sent: 0 };
+  }
+}
+
+export async function getAllFcmTokens(): Promise<{ firebaseUid: string; fcmToken: string }[]> {
+  try {
+    const res = await axios.get(`${SERVICES.identity}/users/all-fcm-tokens`);
+    return res.data as { firebaseUid: string; fcmToken: string }[];
+  } catch {
+    return [];
+  }
+}
+
+// ── P4.2: Subscription History ────────────────────────────────────────────────
+
+export async function getSubscriptionHistory(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.identity}/users/${firebaseUid}/subscription-history`)
+        .then((r) => r.data as unknown),
+    'getSubscriptionHistory',
+  );
 }
 
 // ── Delete Account ────────────────────────────────────────────────────────────

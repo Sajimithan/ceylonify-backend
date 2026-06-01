@@ -25,8 +25,26 @@ export class UsersController implements OnModuleInit {
     setInterval(() => this.sendDayBeforeReminders(), 60 * 60 * 1000);
     // Also run once on startup (catches missed runs during restarts)
     this.sendDayBeforeReminders();
+    // Subscription expiry check — runs every hour
+    setInterval(() => this.checkSubscriptionExpiry(), 60 * 60 * 1000);
+    this.checkSubscriptionExpiry();
     // Seed default feature flags (idempotent — upsert never overwrites existing values)
     await this.seedFeatureFlags();
+  }
+
+  private async checkSubscriptionExpiry() {
+    const now = new Date();
+    await this.prisma.user.updateMany({
+      where: {
+        isPremium: true,
+        subscriptionExpiresAt: { not: null, lt: now },
+      },
+      data: {
+        subscriptionTier: SubscriptionTier.FREE,
+        isPremium: false,
+        subscriptionExpiresAt: null,
+      },
+    });
   }
 
   private async seedFeatureFlags() {
@@ -108,6 +126,8 @@ export class UsersController implements OnModuleInit {
         role: true,
         subscriptionTier: true,
         isPremium: true,
+        isSuspended: true,
+        subscriptionExpiresAt: true,
         phone: true,
         createdAt: true,
         updatedAt: true,
@@ -473,18 +493,31 @@ export class UsersController implements OnModuleInit {
   @Patch(':firebaseUid/subscription')
   async updateSubscription(
     @Param('firebaseUid') firebaseUid: string,
-    @Body() body: { tier: 'FREE' | 'PREMIUM' },
+    @Body() body: { tier: 'FREE' | 'PREMIUM'; changedBy?: string },
   ) {
     const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
     if (!user) throw new NotFoundException('User not found');
-    return this.prisma.user.update({
+    const expiresAt = body.tier === 'PREMIUM'
+      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      : null;
+    const updated = await this.prisma.user.update({
       where: { id: user.id },
       data: {
         subscriptionTier: body.tier as SubscriptionTier,
         isPremium: body.tier === 'PREMIUM',
+        subscriptionExpiresAt: expiresAt,
       },
-      select: { id: true, firebaseUid: true, subscriptionTier: true, isPremium: true },
+      select: { id: true, firebaseUid: true, subscriptionTier: true, isPremium: true, subscriptionExpiresAt: true },
     });
+    await this.prisma.subscriptionEvent.create({
+      data: {
+        userId: user.id,
+        fromTier: user.subscriptionTier,
+        toTier: body.tier,
+        changedBy: body.changedBy ?? 'admin',
+      },
+    });
+    return updated;
   }
 
   // ── Delete Account ────────────────────────────────────────────────────────
@@ -495,6 +528,67 @@ export class UsersController implements OnModuleInit {
     if (!user) throw new NotFoundException('User not found');
     await this.prisma.user.delete({ where: { id: user.id } });
     return { ok: true };
+  }
+
+  // ── P3.1: Account Suspension ──────────────────────────────────────────────
+
+  @Patch(':firebaseUid/suspend')
+  async suspendAccount(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: { isSuspended: true },
+      select: { id: true, firebaseUid: true, isSuspended: true },
+    });
+  }
+
+  @Patch(':firebaseUid/activate')
+  async activateAccount(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: { isSuspended: false },
+      select: { id: true, firebaseUid: true, isSuspended: true },
+    });
+  }
+
+  // ── P3.4: Admin Announcements ─────────────────────────────────────────────
+
+  @Get('all-fcm-tokens')
+  async getAllFcmTokens() {
+    return this.prisma.user.findMany({
+      where: { fcmToken: { not: null } },
+      select: { firebaseUid: true, fcmToken: true },
+    });
+  }
+
+  @Post('broadcast-notification')
+  async broadcastNotification(@Body() body: { title: string; body: string }) {
+    const users = await this.prisma.user.findMany({ select: { id: true } });
+    if (users.length === 0) return { sent: 0 };
+    await this.prisma.notification.createMany({
+      data: users.map((u) => ({
+        userId: u.id,
+        title: body.title,
+        body: body.body,
+        type: 'ANNOUNCEMENT',
+      })),
+    });
+    return { sent: users.length };
+  }
+
+  // ── P4.2: Subscription History ────────────────────────────────────────────
+
+  @Get(':firebaseUid/subscription-history')
+  async getSubscriptionHistory(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) return [];
+    return this.prisma.subscriptionEvent.findMany({
+      where: { userId: user.id },
+      orderBy: { changedAt: 'desc' },
+    });
   }
 
   // ── F2: Email + Phone Verification & Self-Upgrade ─────────────────────────
@@ -533,11 +627,16 @@ export class UsersController implements OnModuleInit {
     if (!user.emailVerifiedAt || !user.phoneVerifiedAt) {
       throw new ForbiddenException('Email and phone must be verified before upgrading to Premium');
     }
-    return this.prisma.user.update({
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { subscriptionTier: SubscriptionTier.PREMIUM, isPremium: true },
-      select: { id: true, firebaseUid: true, subscriptionTier: true, isPremium: true, emailVerifiedAt: true, phoneVerifiedAt: true },
+      data: { subscriptionTier: SubscriptionTier.PREMIUM, isPremium: true, subscriptionExpiresAt: expiresAt },
+      select: { id: true, firebaseUid: true, subscriptionTier: true, isPremium: true, emailVerifiedAt: true, phoneVerifiedAt: true, subscriptionExpiresAt: true },
     });
+    await this.prisma.subscriptionEvent.create({
+      data: { userId: user.id, fromTier: user.subscriptionTier, toTier: 'PREMIUM', changedBy: firebaseUid },
+    });
+    return updated;
   }
 
   // ── F3: Host public profile ────────────────────────────────────────────────
@@ -545,7 +644,7 @@ export class UsersController implements OnModuleInit {
   @Get('host/:firebaseUid')
   async getHostProfile(@Param('firebaseUid') firebaseUid: string) {
     const user = await this.prisma.user.findFirst({
-      where: { firebaseUid, role: Role.HOST },
+      where: { firebaseUid, role: { in: [Role.HOST, Role.ADMIN] } },
       select: { id: true, firebaseUid: true, displayName: true, avatarUrl: true, email: true, createdAt: true },
     });
     if (!user) throw new NotFoundException('Host not found');
@@ -637,7 +736,7 @@ export class UsersController implements OnModuleInit {
     @Query('offset') offset?: string,
   ) {
     return this.prisma.user.findMany({
-      where: { role: Role.HOST },
+      where: { role: { in: [Role.HOST, Role.ADMIN] } },
       orderBy: { createdAt: 'desc' },
       take: limit ? parseInt(limit, 10) : 20,
       skip: offset ? parseInt(offset, 10) : 0,

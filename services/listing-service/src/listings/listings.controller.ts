@@ -138,6 +138,12 @@ export class ListingsController {
     return this.listings.approve(id, adminUid ?? 'system');
   }
 
+  // Admin: suspend
+  @Patch(':id/suspend')
+  suspend(@Param('id') id: string, @Headers('x-admin-uid') adminUid?: string) {
+    return this.listings.suspend(id, adminUid ?? 'system');
+  }
+
   // Admin: reject
   @Patch(':id/reject')
   reject(

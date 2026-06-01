@@ -1,4 +1,4 @@
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, BadRequestException } from '@nestjs/common';
 import {
   Resolver,
   Query,
@@ -42,6 +42,7 @@ import {
   submitHostApplication,
   adminPendingHostApplications,
   adminReviewHostApplication,
+  getAdminUsers,
   getAiUsage,
   incrementAiUsage,
   updateSubscription,
@@ -60,8 +61,13 @@ import {
   getListingExperiences,
   getAllHosts,
   getHostProfile,
+  suspendUser,
+  activateUser,
+  broadcastNotification,
+  getAllFcmTokens,
+  getSubscriptionHistory,
 } from '../identity/identity.client';
-import { getListing, addAuditLog, searchListings, approvedCountByHost, listingsByHost } from '../listings/listings.client';
+import { getListing, addAuditLog, searchListings, approvedCountByHost, listingsByHost, suspendListing } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
 import { Listing } from '../listings/listings.resolver';
 
@@ -80,12 +86,15 @@ class Me {
   @Field() role!: string;
   @Field() subscriptionTier!: string;
   @Field() isPremium!: boolean;
+  @Field() isSuspended!: boolean;
+  @Field() isSuperAdmin!: boolean;
   @Field({ nullable: true }) displayName?: string;
   @Field({ nullable: true }) avatarUrl?: string;
   @Field(() => AiUsageType) aiUsage!: AiUsageType;
   @Field({ nullable: true }) emailVerifiedAt?: string;
   @Field({ nullable: true }) phoneVerifiedAt?: string;
   @Field({ nullable: true }) phone?: string;
+  @Field({ nullable: true }) subscriptionExpiresAt?: string;
 }
 
 @ObjectType()
@@ -134,6 +143,17 @@ class UserRecord {
   @Field({ nullable: true }) badgeLevel?: string;
   @Field(() => Int, { nullable: true }) approvedCount?: number;
   @Field({ nullable: true }) phone?: string;
+  @Field({ nullable: true }) isSuspended?: boolean;
+  @Field({ nullable: true }) subscriptionExpiresAt?: string;
+}
+
+@ObjectType()
+class SubscriptionEventType {
+  @Field(() => ID) id!: string;
+  @Field() fromTier!: string;
+  @Field() toTier!: string;
+  @Field() changedAt!: string;
+  @Field() changedBy!: string;
 }
 
 @ObjectType()
@@ -299,7 +319,7 @@ export class MeResolver {
   async me(@CurrentUser() user: admin.auth.DecodedIdToken) {
     await upsertUser(user.uid, user.email);
     const [profile, usage] = await Promise.all([
-      getUser(user.uid) as Promise<UserProfile & { displayName?: string; avatarUrl?: string; subscriptionTier?: string; isPremium?: boolean; emailVerifiedAt?: string; phoneVerifiedAt?: string; phone?: string }>,
+      getUser(user.uid) as Promise<UserProfile & { displayName?: string; avatarUrl?: string; subscriptionTier?: string; isPremium?: boolean; isSuspended?: boolean; emailVerifiedAt?: string; phoneVerifiedAt?: string; phone?: string; subscriptionExpiresAt?: string }>,
       getAiUsage(user.uid).catch(() => null),
     ]);
     const tier = profile.subscriptionTier ?? 'FREE';
@@ -311,11 +331,14 @@ export class MeResolver {
       role: profile.role,
       subscriptionTier: tier,
       isPremium: profile.isPremium || profile.role === 'HOST' || profile.role === 'ADMIN',
+      isSuspended: profile.isSuspended ?? false,
+      isSuperAdmin: user.uid === (process.env.SUPER_ADMIN_UID ?? ''),
       displayName: profile.displayName ?? null,
       avatarUrl: profile.avatarUrl ?? null,
       phone: profile.phone ?? null,
       emailVerifiedAt: profile.emailVerifiedAt ?? null,
       phoneVerifiedAt: profile.phoneVerifiedAt ?? null,
+      subscriptionExpiresAt: profile.subscriptionExpiresAt ?? null,
       aiUsage: {
         requestsUsed: used,
         monthlyLimit: limit,
@@ -399,7 +422,11 @@ export class MeResolver {
   @UseGuards(AuthGuard)
   @Query(() => [AppNotification])
   async myNotifications(@CurrentUser() user: admin.auth.DecodedIdToken) {
-    return (await getNotifications(user.uid)) as AppNotification[];
+    try {
+      return (await getNotifications(user.uid)) as AppNotification[];
+    } catch {
+      return [];
+    }
   }
 
   @UseGuards(AuthGuard)
@@ -679,6 +706,13 @@ export class MeResolver {
     @Args('id') id: string,
     @Args('role') role: string,
   ) {
+    const superAdminUid = process.env.SUPER_ADMIN_UID ?? '';
+    // Only super admin can change role of other admins or promote to admin
+    const allUsers = (await adminAllUsers()) as Array<{ id: string; firebaseUid: string; role: string }>;
+    const target = allUsers.find((u) => u.id === id);
+    if ((target?.role === 'ADMIN' || role === 'ADMIN') && adminUser.uid !== superAdminUid) {
+      throw new Error('Only the super admin can modify admin roles.');
+    }
     const result = (await adminChangeUserRole(id, role)) as UserRecord;
     void addAuditLog('CHANGE_USER_ROLE', adminUser.uid, id, `Changed role to ${role}`);
     return result;
@@ -687,12 +721,43 @@ export class MeResolver {
   // ── Host Applications ────────────────────────────────────────────────────────
 
   @UseGuards(AuthGuard)
+  @Query(() => HostApplicationRecord, { nullable: true })
+  async myHostApplication(@CurrentUser() user: admin.auth.DecodedIdToken) {
+    try {
+      return (await getHostApplication(user.uid)) as HostApplicationRecord | null;
+    } catch {
+      return null;
+    }
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => HostApplicationRecord, { nullable: true })
+  async adminGetHostApplication(@Args('firebaseUid') firebaseUid: string) {
+    try {
+      return (await getHostApplication(firebaseUid)) as HostApplicationRecord | null;
+    } catch {
+      return null;
+    }
+  }
+
+  @UseGuards(AuthGuard)
   @Mutation(() => Boolean)
   async submitHostApplication(
     @CurrentUser() user: admin.auth.DecodedIdToken,
     @Args('input') input: SubmitHostApplicationInput,
   ): Promise<boolean> {
     await submitHostApplication({ firebaseUid: user.uid, email: user.email, ...input });
+    // Notify all admins about the new host application
+    void (async () => {
+      try {
+        const admins = await getAdminUsers();
+        const title = 'New Host Application';
+        const body = `A new host application from ${user.email ?? user.uid} is pending review.`;
+        await Promise.allSettled(
+          admins.map((a) => createNotification(a.firebaseUid, title, body, 'HOST_APPLICATION')),
+        );
+      } catch { /* silent */ }
+    })();
     return true;
   }
 
@@ -892,12 +957,13 @@ export class MeResolver {
       approvedCountByHost(firebaseUid),
     ]);
     const now = new Date();
-    const upcomingEvents = listings.filter(
-      (l: any) => l.type !== 'EVENT' || !l.startDateTime || new Date(l.startDateTime) >= now,
-    );
-    const pastEvents = listings.filter(
-      (l: any) => l.type === 'EVENT' && l.startDateTime && new Date(l.startDateTime) < now,
-    );
+    const isPastEvent = (l: any) => {
+      if (l.type !== 'EVENT' || !l.startDateTime) return false;
+      const dt = new Date(l.startDateTime);
+      return !isNaN(dt.getTime()) && dt < now;
+    };
+    const upcomingEvents = listings.filter((l: any) => !isPastEvent(l));
+    const pastEvents = listings.filter((l: any) => isPastEvent(l));
     const totalViews = listings.reduce((sum: number, l: any) => sum + (l.viewCount ?? 0), 0);
     return {
       firebaseUid: userProfile.firebaseUid,
@@ -940,12 +1006,13 @@ export class MeResolver {
     ]);
     const approvedListings = listings.filter((l: any) => l.status === 'APPROVED');
     const now = new Date();
-    const upcomingEvents = approvedListings.filter(
-      (l: any) => l.type !== 'EVENT' || !l.startDateTime || new Date(l.startDateTime) >= now,
-    );
-    const pastEvents = approvedListings.filter(
-      (l: any) => l.type === 'EVENT' && l.startDateTime && new Date(l.startDateTime) < now,
-    );
+    const isPastEvent = (l: any) => {
+      if (l.type !== 'EVENT' || !l.startDateTime) return false;
+      const dt = new Date(l.startDateTime);
+      return !isNaN(dt.getTime()) && dt < now;
+    };
+    const upcomingEvents = approvedListings.filter((l: any) => !isPastEvent(l));
+    const pastEvents = approvedListings.filter((l: any) => isPastEvent(l));
     const experiencesByListing = await Promise.all(
       pastEvents.map((l: any) => getListingExperiences(l.id).catch(() => [])),
     );
@@ -961,5 +1028,100 @@ export class MeResolver {
       pastEvents,
       pastExperiences,
     };
+  }
+
+  // ── P3.1: Account Suspension ──────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminSuspendUser(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('firebaseUid') firebaseUid: string,
+  ): Promise<boolean> {
+    const superAdminUid = process.env.SUPER_ADMIN_UID ?? '';
+    const target = (await getUser(firebaseUid)) as { role: string } | null;
+    if (target?.role === 'ADMIN' && adminUser.uid !== superAdminUid) {
+      throw new Error('Only the super admin can suspend other admins.');
+    }
+    await suspendUser(firebaseUid);
+    void addAuditLog('SUSPEND_USER', adminUser.uid, firebaseUid, `Suspended user account`);
+    return true;
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminActivateUser(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('firebaseUid') firebaseUid: string,
+  ): Promise<boolean> {
+    const superAdminUid = process.env.SUPER_ADMIN_UID ?? '';
+    const target = (await getUser(firebaseUid)) as { role: string } | null;
+    if (target?.role === 'ADMIN' && adminUser.uid !== superAdminUid) {
+      throw new Error('Only the super admin can activate other admins.');
+    }
+    await activateUser(firebaseUid);
+    void addAuditLog('ACTIVATE_USER', adminUser.uid, firebaseUid, `Activated user account`);
+    return true;
+  }
+
+  // ── Admin Delete User ─────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminDeleteUser(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('firebaseUid') firebaseUid: string,
+  ): Promise<boolean> {
+    const superAdminUid = process.env.SUPER_ADMIN_UID ?? '';
+    if (firebaseUid === superAdminUid) {
+      throw new BadRequestException('The super admin account cannot be deleted.');
+    }
+    await deleteUserAccount(firebaseUid);
+    await admin.auth().deleteUser(firebaseUid).catch(() => {});
+    void addAuditLog('DELETE_USER', adminUser.uid, firebaseUid, `Deleted user account`);
+    return true;
+  }
+
+  // ── P3.2: Suspend Listing ─────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminSuspendListing(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('id') id: string,
+  ): Promise<boolean> {
+    await suspendListing(id, adminUser.uid);
+    return true;
+  }
+
+  // ── P3.4: Admin Announcements ─────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Int)
+  async adminBroadcastAnnouncement(
+    @Args('title') title: string,
+    @Args('body') body: string,
+  ): Promise<number> {
+    const notifServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004';
+    const [dbResult, tokens] = await Promise.all([
+      broadcastNotification(title, body),
+      getAllFcmTokens(),
+    ]);
+    // Fire-and-forget push to all FCM tokens
+    if (tokens.length > 0) {
+      const axios = (await import('axios')).default;
+      void Promise.allSettled(
+        tokens.map((t) => axios.post(`${notifServiceUrl}/notify`, { uid: t.firebaseUid, title, body }).catch(() => {}))
+      );
+    }
+    return dbResult.sent;
+  }
+
+  // ── P4.2: Subscription History ────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => [SubscriptionEventType])
+  async adminSubscriptionHistory(@Args('firebaseUid') firebaseUid: string) {
+    return (await getSubscriptionHistory(firebaseUid)) as SubscriptionEventType[];
   }
 }

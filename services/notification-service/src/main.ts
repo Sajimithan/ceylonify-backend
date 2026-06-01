@@ -100,6 +100,40 @@ app.post('/notify', async (req, res) => {
   return res.json({ ok: true, sent: expoTokens.length });
 });
 
+// ── Bulk announcement endpoint ───────────────────────────────────────────────
+app.post('/notify/all', async (req, res) => {
+  const { title, body } = (req.body as { title?: string; body?: string }) || {};
+  if (!title || !body)
+    return res.status(400).json({ message: 'title and body required' });
+
+  // Fetch all FCM tokens from identity-service
+  let users: { firebaseUid: string; fcmToken: string }[] = [];
+  try {
+    const r = await axios.get<{ firebaseUid: string; fcmToken: string }[]>(
+      `${IDENTITY_URL}/users/all-fcm-tokens`,
+    );
+    users = r.data ?? [];
+  } catch {
+    return res.status(503).json({ message: 'Could not fetch user tokens' });
+  }
+
+  if (users.length === 0) return res.json({ ok: true, total: 0, sent: 0 });
+
+  // Send to each user via the existing /notify logic (fire-and-forget)
+  const results = await Promise.allSettled(
+    users.map((u) =>
+      axios.post(`http://localhost:${Number(process.env.PORT || 3004)}/notify`, {
+        uid: u.firebaseUid,
+        title,
+        body,
+      }),
+    ),
+  );
+
+  const sent = results.filter((r) => r.status === 'fulfilled').length;
+  return res.json({ ok: true, total: users.length, sent });
+});
+
 const port = Number(process.env.PORT || 3004);
 app.listen(port, () => {
   console.log(`notification-service listening on http://localhost:${port}`);
