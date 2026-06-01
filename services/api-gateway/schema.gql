@@ -319,6 +319,7 @@ type Mutation {
   deleteMyExperience(id: ID!): Boolean!
   adminSuspendUser(firebaseUid: String!): Boolean!
   adminActivateUser(firebaseUid: String!): Boolean!
+  adminDeleteUser(firebaseUid: String!): Boolean!
   adminSuspendListing(id: String!): Boolean!
   adminBroadcastAnnouncement(title: String!, body: String!): Int!
   createListing(input: CreateListingInput!): Listing!

@@ -1,4 +1,4 @@
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, BadRequestException } from '@nestjs/common';
 import {
   Resolver,
   Query,
@@ -1061,6 +1061,24 @@ export class MeResolver {
     }
     await activateUser(firebaseUid);
     void addAuditLog('ACTIVATE_USER', adminUser.uid, firebaseUid, `Activated user account`);
+    return true;
+  }
+
+  // ── Admin Delete User ─────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminDeleteUser(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('firebaseUid') firebaseUid: string,
+  ): Promise<boolean> {
+    const superAdminUid = process.env.SUPER_ADMIN_UID ?? '';
+    if (firebaseUid === superAdminUid) {
+      throw new BadRequestException('The super admin account cannot be deleted.');
+    }
+    await deleteUserAccount(firebaseUid);
+    await admin.auth().deleteUser(firebaseUid).catch(() => {});
+    void addAuditLog('DELETE_USER', adminUser.uid, firebaseUid, `Deleted user account`);
     return true;
   }
 
