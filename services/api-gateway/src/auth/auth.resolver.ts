@@ -5,6 +5,7 @@ import { AuthGuard } from './auth.guard';
 import { AdminGuard } from './admin.guard';
 import { CurrentUser } from './current-user.decorator';
 import { sendPasswordResetEmail, sendAdminWelcomeEmail } from '../email/email.service';
+import { getFirebaseAdminApp } from '../firebase/firebase-admin';
 import { upsertUser, adminAllUsers, adminChangeUserRole } from '../identity/identity.client';
 import { addAuditLog } from '../listings/listings.client';
 
@@ -13,10 +14,11 @@ export class AuthResolver {
   @Mutation(() => Boolean)
   async forgotPassword(@Args('email') email: string): Promise<boolean> {
     try {
+      getFirebaseAdminApp();
       const link = await admin.auth().generatePasswordResetLink(email.trim());
       await sendPasswordResetEmail(email.trim(), link);
-    } catch {
-      // always return true — never reveal whether the email exists
+    } catch (err) {
+      console.error('[forgotPassword] failed:', err);
     }
     return true;
   }
