@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import { AuthGuard } from './auth.guard';
 import { AdminGuard } from './admin.guard';
 import { CurrentUser } from './current-user.decorator';
-import { sendPasswordResetEmail, sendAdminWelcomeEmail } from '../email/email.service';
+import { sendPasswordResetEmail, sendAdminWelcomeEmail, sendEmailVerificationEmail } from '../email/email.service';
 import { getFirebaseAdminApp } from '../firebase/firebase-admin';
 import { upsertUser, adminAllUsers, adminChangeUserRole } from '../identity/identity.client';
 import { addAuditLog } from '../listings/listings.client';
@@ -23,13 +23,36 @@ export class AuthResolver {
     return true;
   }
 
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async sendEmailVerification(
+    @CurrentUser() caller: admin.auth.DecodedIdToken,
+  ): Promise<boolean> {
+    try {
+      getFirebaseAdminApp();
+      const firebaseUser = await admin.auth().getUser(caller.uid);
+      if (!firebaseUser.email || firebaseUser.emailVerified) return true;
+      const webAppUrl = process.env.WEB_APP_URL ?? 'http://localhost:5173';
+      const link = await admin.auth().generateEmailVerificationLink(firebaseUser.email, {
+        url: `${webAppUrl}/account?verified=email`,
+      });
+      await sendEmailVerificationEmail(firebaseUser.email, link);
+    } catch (err) {
+      console.error('[sendEmailVerification] failed:', err);
+    }
+    return true;
+  }
+
   @UseGuards(AuthGuard, AdminGuard)
   @Mutation(() => Boolean)
   async adminCreateAdminAccount(
     @CurrentUser() caller: admin.auth.DecodedIdToken,
     @Args('email') email: string,
-    @Args('password') password: string,
   ): Promise<boolean> {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#$!';
+    const bytes = require('crypto').randomBytes(12) as Buffer;
+    const password = Array.from(bytes).map((b: number) => chars[b % chars.length]).join('');
+
     // 1. Create Firebase auth account
     const firebaseUser = await admin.auth().createUser({
       email: email.trim(),

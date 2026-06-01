@@ -123,6 +123,7 @@ export class UsersController implements OnModuleInit {
         firebaseUid: true,
         email: true,
         displayName: true,
+        avatarUrl: true,
         role: true,
         subscriptionTier: true,
         isPremium: true,

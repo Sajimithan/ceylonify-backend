@@ -42,6 +42,36 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
   });
 }
 
+export async function sendEmailVerificationEmail(to: string, verifyLink: string): Promise<void> {
+  const from = `"Ceylonify" <${process.env.SMTP_FROM ?? process.env.SMTP_USER}>`;
+
+  await createTransport().sendMail({
+    from,
+    to,
+    subject: 'Verify your Ceylonify email address',
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#fff;border-radius:12px;border:1px solid #e5e7eb;">
+        <h2 style="color:#0ea5e9;margin:0 0 4px;">Ceylonify</h2>
+        <p style="color:#94a3b8;font-size:12px;margin:0 0 24px;">Sri Lanka Travel Platform</p>
+        <h3 style="color:#1e293b;margin:0 0 12px;">Verify your email address</h3>
+        <p style="color:#64748b;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          Click the button below to verify your email address for your Ceylonify account.
+          This link expires in <strong>24 hours</strong>.
+        </p>
+        <a href="${verifyLink}"
+           style="display:inline-block;padding:13px 32px;background:#0ea5e9;color:#fff;font-weight:700;border-radius:8px;text-decoration:none;font-size:15px;">
+          Verify Email
+        </a>
+        <p style="color:#94a3b8;font-size:13px;margin:24px 0 0;">
+          If you didn't request this, you can safely ignore this email.
+        </p>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+        <p style="color:#cbd5e1;font-size:12px;margin:0;">© ${new Date().getFullYear()} Ceylonify</p>
+      </div>
+    `,
+  });
+}
+
 export async function sendAdminWelcomeEmail(to: string, password: string): Promise<void> {
   const from = `"Ceylonify" <${process.env.SMTP_FROM ?? process.env.SMTP_USER}>`;
   const loginUrl = process.env.WEB_APP_URL ?? 'http://localhost:5173/login';
