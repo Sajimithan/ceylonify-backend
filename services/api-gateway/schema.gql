@@ -335,7 +335,7 @@ type Mutation {
   rejectListing(id: ID!, reason: String!): Listing!
   forgotPassword(email: String!): Boolean!
   sendEmailVerification: Boolean!
-  adminCreateAdminAccount(email: String!, password: String!): Boolean!
+  adminCreateAdminAccount(email: String!): Boolean!
 }
 
 input ChatMessageInput {

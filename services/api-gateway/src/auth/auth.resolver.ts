@@ -48,8 +48,11 @@ export class AuthResolver {
   async adminCreateAdminAccount(
     @CurrentUser() caller: admin.auth.DecodedIdToken,
     @Args('email') email: string,
-    @Args('password') password: string,
   ): Promise<boolean> {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#$!';
+    const bytes = require('crypto').randomBytes(12) as Buffer;
+    const password = Array.from(bytes).map((b: number) => chars[b % chars.length]).join('');
+
     // 1. Create Firebase auth account
     const firebaseUser = await admin.auth().createUser({
       email: email.trim(),
