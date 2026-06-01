@@ -141,6 +141,7 @@ type UserRecord {
   phone: String
   isSuspended: Boolean
   subscriptionExpiresAt: String
+  avatarUrl: String
 }
 
 type SubscriptionEventType {

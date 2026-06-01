@@ -145,6 +145,7 @@ class UserRecord {
   @Field({ nullable: true }) phone?: string;
   @Field({ nullable: true }) isSuspended?: boolean;
   @Field({ nullable: true }) subscriptionExpiresAt?: string;
+  @Field({ nullable: true }) avatarUrl?: string;
 }
 
 @ObjectType()
