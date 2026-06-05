@@ -17,7 +17,7 @@ import * as admin from 'firebase-admin';
 import { AuthGuard } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { enhanceDescription, moderateListing, aiReviewContent } from '../ai/ai.service';
+import { enhanceDescription, moderateListing, aiReviewContent, summarizeSupportTicket } from '../ai/ai.service';
 import { getUser, createNotification, getAdminUsers, getNearbyTravelers } from '../identity/identity.client';
 import axios from 'axios';
 
@@ -145,6 +145,12 @@ class AIModerationResult {
   @Field() confidence!: number;
   @Field(() => [String]) flags!: string[];
   @Field() summary!: string;
+}
+
+@ObjectType()
+class AISupportResult {
+  @Field() summary!: string;
+  @Field() suggestedReply!: string;
 }
 
 @ObjectType()
@@ -341,6 +347,15 @@ export class ListingsResolver {
     @Args('description') description: string,
   ): Promise<AIModerationResult> {
     return aiReviewContent(title, description);
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => AISupportResult)
+  async aiSupportSummary(
+    @Args('subject') subject: string,
+    @Args('conversation') conversation: string,
+  ): Promise<AISupportResult> {
+    return summarizeSupportTicket(subject, conversation);
   }
 
   @Query(() => HostBadgeResult)

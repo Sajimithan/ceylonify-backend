@@ -236,6 +236,50 @@ export async function aiReviewContent(
   }
 }
 
+export async function summarizeSupportTicket(
+  subject: string,
+  conversation: string,
+): Promise<{ summary: string; suggestedReply: string }> {
+  const SYSTEM = `You are a customer support assistant for Ceylonify, a Sri Lanka travel platform. Help the admin team handle user queries efficiently. Always respond in valid JSON only — no markdown, no extra text.`;
+  const USER = `Support ticket subject: "${subject}"\n\nConversation:\n${conversation}\n\nProvide:\n1. A concise 2-sentence summary of what the user needs\n2. A professional, friendly admin reply\n\nRespond ONLY with this JSON:\n{"summary":"...","suggestedReply":"..."}`;
+
+  // Try Groq first
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    try {
+      const { default: Groq } = await import('groq-sdk');
+      const groq = new Groq({ apiKey: groqKey });
+      const resp = await groq.chat.completions.create({
+        model: process.env.GROQ_MODEL ?? 'llama-3.1-8b-instant',
+        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: USER }],
+        max_tokens: 400,
+        temperature: 0.5,
+      });
+      const text = resp.choices[0]?.message?.content?.trim() ?? '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) return JSON.parse(jsonMatch[0]) as { summary: string; suggestedReply: string };
+    } catch {
+      // fall through to OpenAI
+    }
+  }
+
+  // OpenAI fallback
+  const client = getOpenAIClient();
+  if (!client) return { summary: 'AI not configured.', suggestedReply: '' };
+  try {
+    const resp = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: USER }],
+      max_tokens: 400,
+      temperature: 0.5,
+      response_format: { type: 'json_object' },
+    });
+    return JSON.parse(resp.choices[0]?.message?.content ?? '{}') as { summary: string; suggestedReply: string };
+  } catch {
+    return { summary: 'AI summary failed.', suggestedReply: '' };
+  }
+}
+
 export async function moderateListing(
   title: string,
   description: string,

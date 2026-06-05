@@ -80,6 +80,11 @@ type AIModerationResult {
   summary: String!
 }
 
+type AISupportResult {
+  summary: String!
+  suggestedReply: String!
+}
+
 type HostBadgeResult {
   approvedCount: Float!
   badgeLevel: String!
@@ -368,6 +373,7 @@ type Mutation {
   adminActionReport(reportId: ID!): Boolean!
   enhanceDescription(text: String!): String!
   aiReviewListing(title: String!, description: String!): AIModerationResult!
+  aiSupportSummary(subject: String!, conversation: String!): AISupportResult!
   approveListing(id: ID!): Listing!
   rejectListing(id: ID!, reason: String!): Listing!
   forgotPassword(email: String!): Boolean!
