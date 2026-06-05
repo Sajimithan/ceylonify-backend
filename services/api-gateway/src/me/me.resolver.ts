@@ -1102,13 +1102,15 @@ export class MeResolver {
   async adminBroadcastAnnouncement(
     @Args('title') title: string,
     @Args('body') body: string,
+    @Args('roles', { type: () => [String], nullable: true }) roles?: string[],
   ): Promise<number> {
     const notifServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004';
+    const targetRoles = roles && roles.length > 0 ? roles : undefined;
     const [dbResult, tokens] = await Promise.all([
-      broadcastNotification(title, body),
-      getAllFcmTokens(),
+      broadcastNotification(title, body, targetRoles),
+      getAllFcmTokens(targetRoles),
     ]);
-    // Fire-and-forget push to all FCM tokens
+    // Fire-and-forget push to filtered FCM tokens
     if (tokens.length > 0) {
       const axios = (await import('axios')).default;
       void Promise.allSettled(

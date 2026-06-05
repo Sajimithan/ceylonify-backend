@@ -396,18 +396,19 @@ export async function activateUser(firebaseUid: string) {
 
 // ── P3.4: Announcements ───────────────────────────────────────────────────────
 
-export async function broadcastNotification(title: string, body: string): Promise<{ sent: number }> {
+export async function broadcastNotification(title: string, body: string, roles?: string[]): Promise<{ sent: number }> {
   try {
-    const res = await axios.post(`${SERVICES.identity}/users/broadcast-notification`, { title, body });
+    const res = await axios.post(`${SERVICES.identity}/users/broadcast-notification`, { title, body, roles });
     return res.data as { sent: number };
   } catch {
     return { sent: 0 };
   }
 }
 
-export async function getAllFcmTokens(): Promise<{ firebaseUid: string; fcmToken: string }[]> {
+export async function getAllFcmTokens(roles?: string[]): Promise<{ firebaseUid: string; fcmToken: string }[]> {
   try {
-    const res = await axios.get(`${SERVICES.identity}/users/all-fcm-tokens`);
+    const params = roles && roles.length > 0 ? `?roles=${roles.join(',')}` : '';
+    const res = await axios.get(`${SERVICES.identity}/users/all-fcm-tokens${params}`);
     return res.data as { firebaseUid: string; fcmToken: string }[];
   } catch {
     return [];

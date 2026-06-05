@@ -558,16 +558,19 @@ export class UsersController implements OnModuleInit {
   // ── P3.4: Admin Announcements ─────────────────────────────────────────────
 
   @Get('all-fcm-tokens')
-  async getAllFcmTokens() {
-    return this.prisma.user.findMany({
-      where: { fcmToken: { not: null } },
-      select: { firebaseUid: true, fcmToken: true },
-    });
+  async getAllFcmTokens(@Query('roles') roles?: string) {
+    const roleList = roles ? roles.split(',').filter(Boolean) : [];
+    const where: any = { fcmToken: { not: null } };
+    if (roleList.length > 0) where.role = { in: roleList };
+    return this.prisma.user.findMany({ where, select: { firebaseUid: true, fcmToken: true } });
   }
 
   @Post('broadcast-notification')
-  async broadcastNotification(@Body() body: { title: string; body: string }) {
-    const users = await this.prisma.user.findMany({ select: { id: true } });
+  async broadcastNotification(@Body() body: { title: string; body: string; roles?: string[] }) {
+    const where = body.roles && body.roles.length > 0
+      ? { role: { in: body.roles as any[] } }
+      : {};
+    const users = await this.prisma.user.findMany({ where, select: { id: true } });
     if (users.length === 0) return { sent: 0 };
     await this.prisma.notification.createMany({
       data: users.map((u) => ({

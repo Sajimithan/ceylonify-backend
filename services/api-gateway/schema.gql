@@ -329,7 +329,7 @@ type Mutation {
   adminActivateUser(firebaseUid: String!): Boolean!
   adminDeleteUser(firebaseUid: String!): Boolean!
   adminSuspendListing(id: String!): Boolean!
-  adminBroadcastAnnouncement(title: String!, body: String!): Int!
+  adminBroadcastAnnouncement(title: String!, body: String!, roles: [String!]): Int!
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
   deleteListing(id: String!): Listing!
