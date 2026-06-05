@@ -33,6 +33,7 @@ type Listing {
   createdBy: String
   rejectionReason: String
   suspensionReason: String
+  isRepost: Boolean!
   startDateTime: String
   isPremium: Boolean!
   viewCount: Int!

@@ -79,6 +79,9 @@ export class Listing {
   suspensionReason?: string;
 
   @Column({ default: false })
+  isRepost!: boolean;
+
+  @Column({ default: false })
   isPremium!: boolean;
 
   @Column({ type: 'int', default: 0 })
