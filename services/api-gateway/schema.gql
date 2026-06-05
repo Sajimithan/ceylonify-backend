@@ -64,6 +64,8 @@ type AuditLogEntry {
   id: ID!
   action: String!
   adminFirebaseUid: String!
+  adminEmail: String
+  adminName: String
   resourceId: String
   details: String
   createdAt: String!

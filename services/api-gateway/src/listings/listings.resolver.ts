@@ -130,6 +130,8 @@ class AuditLogEntry {
   @Field(() => ID) id!: string;
   @Field() action!: string;
   @Field() adminFirebaseUid!: string;
+  @Field({ nullable: true }) adminEmail?: string;
+  @Field({ nullable: true }) adminName?: string;
   @Field({ nullable: true }) resourceId?: string;
   @Field({ nullable: true }) details?: string;
   @Field() createdAt!: string;
@@ -449,7 +451,19 @@ export class ListingsResolver {
   @UseGuards(AuthGuard, AdminGuard)
   @Query(() => [AuditLogEntry])
   async adminAuditLogs() {
-    return (await adminGetAuditLogs()) as AuditLogEntry[];
+    const logs = (await adminGetAuditLogs()) as AuditLogEntry[];
+    const uids = [...new Set(logs.map((l) => l.adminFirebaseUid).filter(Boolean))];
+    const userMap = new Map<string, { email?: string; displayName?: string }>();
+    await Promise.all(
+      uids.map(async (uid) => {
+        const u = (await getUser(uid).catch(() => null)) as { email?: string; displayName?: string } | null;
+        if (u) userMap.set(uid, u);
+      }),
+    );
+    return logs.map((l) => {
+      const u = userMap.get(l.adminFirebaseUid);
+      return { ...l, adminEmail: u?.email, adminName: u?.displayName };
+    });
   }
 
   // ── Field resolvers ───────────────────────────────────────────────────────
