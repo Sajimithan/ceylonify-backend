@@ -167,6 +167,8 @@ type FeatureFlagType {
   enabledForHosts: Boolean!
   updatedAt: String!
   updatedByAdminUid: String
+  updatedByAdminEmail: String
+  updatedByAdminName: String
 }
 
 type UserStats {

@@ -166,6 +166,8 @@ class FeatureFlagType {
   @Field() enabledForHosts!: boolean;
   @Field() updatedAt!: string;
   @Field({ nullable: true }) updatedByAdminUid?: string;
+  @Field({ nullable: true }) updatedByAdminEmail?: string;
+  @Field({ nullable: true }) updatedByAdminName?: string;
 }
 
 @ObjectType()
@@ -509,7 +511,21 @@ export class MeResolver {
   @UseGuards(AuthGuard)
   @Query(() => [FeatureFlagType])
   async featureFlags() {
-    return getFeatureFlags();
+    const flags = (await getFeatureFlags()) as FeatureFlagType[];
+    // Deduplicate UIDs then fetch user details in parallel
+    const uids = [...new Set(flags.map((f) => f.updatedByAdminUid).filter(Boolean))] as string[];
+    const userMap = new Map<string, { email?: string; displayName?: string }>();
+    await Promise.all(
+      uids.map(async (uid) => {
+        const u = (await getUser(uid).catch(() => null)) as { email?: string; displayName?: string } | null;
+        if (u) userMap.set(uid, u);
+      }),
+    );
+    return flags.map((f) => {
+      if (!f.updatedByAdminUid) return f;
+      const u = userMap.get(f.updatedByAdminUid);
+      return { ...f, updatedByAdminEmail: u?.email, updatedByAdminName: u?.displayName };
+    });
   }
 
   @UseGuards(AuthGuard, AdminGuard)
