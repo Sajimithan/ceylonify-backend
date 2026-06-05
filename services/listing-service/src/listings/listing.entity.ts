@@ -43,6 +43,9 @@ export class Listing {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   price?: number;
 
+  @Column({ type: 'jsonb', nullable: true })
+  priceTiers?: { label: string; price: number; description: string }[];
+
   @Column({ type: 'timestamptz', nullable: true })
   startDateTime?: Date;
 

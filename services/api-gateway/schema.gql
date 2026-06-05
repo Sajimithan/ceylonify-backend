@@ -9,6 +9,12 @@ type ServiceHealth {
   data: String
 }
 
+type PriceTier {
+  label: String!
+  price: Float!
+  description: String!
+}
+
 type Listing {
   id: ID!
   title: String!
@@ -16,6 +22,7 @@ type Listing {
   type: String!
   category: String
   price: String
+  priceTiers: [PriceTier!]
   placeName: String
   mapLink: String
   imageUrl: String
@@ -372,6 +379,13 @@ input CreateListingInput {
   lat: Float!
   lng: Float!
   isPremium: Boolean
+  priceTiers: [PriceTierInput!]
+}
+
+input PriceTierInput {
+  label: String!
+  price: Float!
+  description: String!
 }
 
 input UpdateListingInput {
@@ -387,4 +401,5 @@ input UpdateListingInput {
   lat: Float
   lng: Float
   isPremium: Boolean
+  priceTiers: [PriceTierInput!]
 }

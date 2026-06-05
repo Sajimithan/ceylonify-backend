@@ -69,6 +69,7 @@ export class ListingsService {
       mapLink: dto.mapLink?.trim(),
       imageUrl: dto.imageUrl?.trim(),
       price: dto.price,
+      priceTiers: dto.priceTiers,
       isPremium: dto.isPremium ?? false,
       startDateTime: dto.startDateTime
         ? new Date(dto.startDateTime)
@@ -203,6 +204,7 @@ export class ListingsService {
     if (dto.mapLink !== undefined) listing.mapLink = dto.mapLink?.trim() || undefined;
     if (dto.imageUrl !== undefined) listing.imageUrl = dto.imageUrl?.trim() || undefined;
     if (dto.price !== undefined) listing.price = dto.price;
+    if (dto.priceTiers !== undefined) listing.priceTiers = dto.priceTiers;
     if (dto.startDateTime !== undefined) {
       listing.startDateTime = dto.startDateTime ? new Date(dto.startDateTime) : undefined;
     }

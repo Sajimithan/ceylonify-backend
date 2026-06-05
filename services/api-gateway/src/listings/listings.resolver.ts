@@ -2,6 +2,7 @@ import { UseGuards } from '@nestjs/common';
 import {
   Args,
   Field,
+  Float,
   ID,
   InputType,
   Int,
@@ -58,6 +59,20 @@ import {
 // ── ObjectTypes ──────────────────────────────────────────────────────────────
 
 @ObjectType()
+class PriceTier {
+  @Field() label!: string;
+  @Field(() => Float) price!: number;
+  @Field() description!: string;
+}
+
+@InputType()
+class PriceTierInput {
+  @Field() label!: string;
+  @Field(() => Float) price!: number;
+  @Field() description!: string;
+}
+
+@ObjectType()
 export class Listing {
   @Field(() => ID) id!: string;
   @Field() title!: string;
@@ -66,6 +81,7 @@ export class Listing {
 
   @Field({ nullable: true }) category?: string;
   @Field({ nullable: true }) price?: string;
+  @Field(() => [PriceTier], { nullable: true }) priceTiers?: PriceTier[];
   @Field({ nullable: true }) placeName?: string;
   @Field({ nullable: true }) mapLink?: string;
   @Field({ nullable: true }) imageUrl?: string;
@@ -159,6 +175,7 @@ class CreateListingInput {
   @Field() lat!: number;
   @Field() lng!: number;
   @Field({ nullable: true }) isPremium?: boolean;
+  @Field(() => [PriceTierInput], { nullable: true }) priceTiers?: PriceTierInput[];
 }
 
 @InputType()
@@ -177,6 +194,7 @@ class UpdateListingInput {
   @Field({ nullable: true }) lat?: number;
   @Field({ nullable: true }) lng?: number;
   @Field({ nullable: true }) isPremium?: boolean;
+  @Field(() => [PriceTierInput], { nullable: true }) priceTiers?: PriceTierInput[];
 }
 
 // ── Entity interface (for field resolvers) ───────────────────────────────────

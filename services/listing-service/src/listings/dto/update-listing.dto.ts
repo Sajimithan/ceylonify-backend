@@ -5,7 +5,11 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { PriceTierDto } from './create-listing.dto';
 import { ListingType } from '../listing.entity';
 
 export class UpdateListingDto {
@@ -58,4 +62,10 @@ export class UpdateListingDto {
   @IsOptional()
   @IsBoolean()
   isPremium?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PriceTierDto)
+  priceTiers?: PriceTierDto[];
 }
