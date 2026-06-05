@@ -75,6 +75,9 @@ export class Listing {
   @Column({ nullable: true })
   rejectReason?: string;
 
+  @Column({ nullable: true })
+  suspensionReason?: string;
+
   @Column({ default: false })
   isPremium!: boolean;
 

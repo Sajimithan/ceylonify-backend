@@ -1106,8 +1106,9 @@ export class MeResolver {
   async adminSuspendListing(
     @CurrentUser() adminUser: admin.auth.DecodedIdToken,
     @Args('id') id: string,
+    @Args('reason', { nullable: true }) reason?: string,
   ): Promise<boolean> {
-    await suspendListing(id, adminUser.uid);
+    await suspendListing(id, adminUser.uid, reason);
     return true;
   }
 

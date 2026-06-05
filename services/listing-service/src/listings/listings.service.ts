@@ -303,19 +303,22 @@ export class ListingsService {
     return saved;
   }
 
-  async suspend(id: string, adminUid = 'system') {
+  async suspend(id: string, adminUid = 'system', reason?: string) {
     const listing = await this.repo.findOne({ where: { id } });
     if (!listing) throw new NotFoundException('Listing not found');
 
     listing.status = ListingStatus.SUSPENDED;
+    listing.suspensionReason = reason ?? undefined;
 
     const saved = await this.repo.save(listing);
 
-    void this.addAuditLog('SUSPEND_LISTING', adminUid, id, `Suspended: "${saved.title}"`);
+    void this.addAuditLog('SUSPEND_LISTING', adminUid, id, `Suspended: "${saved.title}"${reason ? ` — Reason: ${reason}` : ''}`);
     void this.safeNotify(
       saved.hostFirebaseUid,
       'Listing suspended ⚠️',
-      `Your listing "${saved.title}" has been suspended pending review.`,
+      reason
+        ? `Your listing "${saved.title}" has been suspended: ${reason}`
+        : `Your listing "${saved.title}" has been suspended pending review.`,
       'LISTING_REJECTED',
       saved.id,
     );

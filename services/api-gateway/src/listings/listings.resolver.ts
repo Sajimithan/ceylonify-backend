@@ -93,6 +93,7 @@ export class Listing {
   @Field({ nullable: true }) lng?: number;
   @Field({ nullable: true }) createdBy?: string;
   @Field({ nullable: true }) rejectionReason?: string;
+  @Field({ nullable: true }) suspensionReason?: string;
 
   @Field({ nullable: true }) startDateTime?: string;
   @Field() isPremium!: boolean;
@@ -205,6 +206,7 @@ interface ListingEntity {
   id?: string;
   hostFirebaseUid?: string;
   rejectReason?: string;
+  suspensionReason?: string;
   isPremium?: boolean;
   viewCount?: number;
   location?: { coordinates: [number, number] };
@@ -486,6 +488,11 @@ export class ListingsResolver {
   @ResolveField(() => String, { nullable: true })
   rejectionReason(@Parent() listing: ListingEntity) {
     return listing.rejectReason ?? null;
+  }
+
+  @ResolveField(() => String, { nullable: true })
+  suspensionReason(@Parent() listing: ListingEntity) {
+    return listing.suspensionReason ?? null;
   }
 
   @ResolveField(() => Boolean)

@@ -289,13 +289,13 @@ export async function adminActionReport(reportId: string) {
   );
 }
 
-export async function suspendListing(id: string, adminUid?: string) {
+export async function suspendListing(id: string, adminUid?: string, reason?: string) {
   return withRetry(
     () =>
       axios
         .patch(
           `${SERVICES.listing}/listings/${id}/suspend`,
-          {},
+          reason ? { reason } : {},
           adminUid ? { headers: { 'x-admin-uid': adminUid } } : {},
         )
         .then((r) => r.data as unknown),

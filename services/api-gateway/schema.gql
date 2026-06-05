@@ -32,6 +32,7 @@ type Listing {
   lng: Float
   createdBy: String
   rejectionReason: String
+  suspensionReason: String
   startDateTime: String
   isPremium: Boolean!
   viewCount: Int!
@@ -332,7 +333,7 @@ type Mutation {
   adminSuspendUser(firebaseUid: String!): Boolean!
   adminActivateUser(firebaseUid: String!): Boolean!
   adminDeleteUser(firebaseUid: String!): Boolean!
-  adminSuspendListing(id: String!): Boolean!
+  adminSuspendListing(id: String!, reason: String): Boolean!
   adminBroadcastAnnouncement(title: String!, body: String!, roles: [String!]): Int!
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
