@@ -595,6 +595,68 @@ export class UsersController implements OnModuleInit {
     });
   }
 
+  // ── Contact Support ────────────────────────────────────────────────────────
+
+  @Get('support/admin/all')
+  async adminGetAllSupportTickets() {
+    return this.prisma.supportTicket.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { email: true, displayName: true, firebaseUid: true } },
+        replies: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+  }
+
+  @Post('support/:ticketId/reply')
+  async adminReplyToTicket(
+    @Param('ticketId') ticketId: string,
+    @Body() body: { senderUid: string; message: string },
+  ) {
+    const ticket = await this.prisma.supportTicket.findUnique({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Support ticket not found');
+    const reply = await this.prisma.supportReply.create({
+      data: { ticketId, fromAdmin: true, senderUid: body.senderUid, message: body.message },
+    });
+    await this.prisma.supportTicket.update({
+      where: { id: ticketId },
+      data: { status: 'REPLIED' as any },
+    });
+    return reply;
+  }
+
+  @Patch('support/:ticketId/close')
+  async adminCloseTicket(@Param('ticketId') ticketId: string) {
+    return this.prisma.supportTicket.update({
+      where: { id: ticketId },
+      data: { status: 'CLOSED' as any },
+    });
+  }
+
+  @Post(':firebaseUid/support')
+  async createSupportTicket(
+    @Param('firebaseUid') firebaseUid: string,
+    @Body() body: { subject: string; message: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.supportTicket.create({
+      data: { userId: user.id, subject: body.subject, message: body.message },
+      include: { replies: true },
+    });
+  }
+
+  @Get(':firebaseUid/support')
+  async getMySupportTickets(@Param('firebaseUid') firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    if (!user) return [];
+    return this.prisma.supportTicket.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      include: { replies: { orderBy: { createdAt: 'asc' } } },
+    });
+  }
+
   // ── F2: Email + Phone Verification & Self-Upgrade ─────────────────────────
 
   @Patch(':firebaseUid/mark-email-verified')

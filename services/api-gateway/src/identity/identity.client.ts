@@ -615,3 +615,54 @@ export async function adminReviewHostApplication(
     'adminReviewHostApplication',
   );
 }
+
+export async function createSupportTicket(firebaseUid: string, subject: string, message: string) {
+  return withRetry(
+    () =>
+      axios
+        .post(`${SERVICES.identity}/users/${firebaseUid}/support`, { subject, message })
+        .then((r) => r.data as unknown),
+    'createSupportTicket',
+  );
+}
+
+export async function getMySupportTickets(firebaseUid: string) {
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.identity}/users/${firebaseUid}/support`)
+        .then((r) => r.data as unknown),
+    'getMySupportTickets',
+  );
+}
+
+export async function adminGetAllSupportTickets() {
+  return withRetry(
+    () =>
+      axios
+        .get(`${SERVICES.identity}/users/support/admin/all`)
+        .then((r) => r.data as unknown),
+    'adminGetAllSupportTickets',
+  );
+}
+
+export async function adminReplyToTicket(ticketId: string, senderUid: string, message: string) {
+  return withRetry(
+    () =>
+      axios
+        .post(`${SERVICES.identity}/users/support/${ticketId}/reply`, { senderUid, message })
+        .then((r) => r.data as unknown),
+    'adminReplyToTicket',
+  );
+}
+
+export async function adminCloseTicket(ticketId: string) {
+  return withRetry(
+    () =>
+      axios
+        .patch(`${SERVICES.identity}/users/support/${ticketId}/close`)
+        .then((r) => r.data as unknown),
+    'adminCloseTicket',
+  );
+}
+

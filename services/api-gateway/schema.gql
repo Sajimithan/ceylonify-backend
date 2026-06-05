@@ -163,6 +163,25 @@ type SubscriptionEventType {
   changedBy: String!
 }
 
+type SupportReplyType {
+  id: ID!
+  fromAdmin: Boolean!
+  senderUid: String!
+  message: String!
+  createdAt: String!
+}
+
+type SupportTicketType {
+  id: ID!
+  subject: String!
+  message: String!
+  status: String!
+  createdAt: String!
+  userEmail: String
+  userDisplayName: String
+  replies: [SupportReplyType!]!
+}
+
 type FeatureFlagType {
   key: String!
   label: String!
@@ -288,6 +307,8 @@ type Query {
   allHosts(limit: Int, offset: Int): [HostCard!]!
   hostPublicProfile(firebaseUid: String!): HostPublicProfile!
   adminSubscriptionHistory(firebaseUid: String!): [SubscriptionEventType!]!
+  mySupportTickets: [SupportTicketType!]!
+  adminAllSupportTickets: [SupportTicketType!]!
   myListings: [Listing!]!
   adminReports: [ListingReport!]!
   hostBadge(firebaseUid: String!): HostBadgeResult!
@@ -336,6 +357,9 @@ type Mutation {
   adminDeleteUser(firebaseUid: String!): Boolean!
   adminSuspendListing(id: String!, reason: String): Boolean!
   adminBroadcastAnnouncement(title: String!, body: String!, roles: [String!]): Int!
+  createSupportTicket(subject: String!, message: String!): Boolean!
+  adminReplyToSupportTicket(ticketId: String!, message: String!): Boolean!
+  adminCloseSupportTicket(ticketId: String!): Boolean!
   createListing(input: CreateListingInput!): Listing!
   updateListing(id: String!, input: UpdateListingInput!): Listing!
   deleteListing(id: String!): Listing!

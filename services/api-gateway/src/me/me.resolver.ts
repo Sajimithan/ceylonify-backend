@@ -66,6 +66,11 @@ import {
   broadcastNotification,
   getAllFcmTokens,
   getSubscriptionHistory,
+  createSupportTicket,
+  getMySupportTickets,
+  adminGetAllSupportTickets,
+  adminReplyToTicket,
+  adminCloseTicket,
 } from '../identity/identity.client';
 import { getListing, addAuditLog, searchListings, approvedCountByHost, listingsByHost, suspendListing } from '../listings/listings.client';
 import { planItinerary as aiPlanItinerary } from '../ai/ai.service';
@@ -155,6 +160,27 @@ class SubscriptionEventType {
   @Field() toTier!: string;
   @Field() changedAt!: string;
   @Field() changedBy!: string;
+}
+
+@ObjectType()
+class SupportReplyType {
+  @Field(() => ID) id!: string;
+  @Field() fromAdmin!: boolean;
+  @Field() senderUid!: string;
+  @Field() message!: string;
+  @Field() createdAt!: string;
+}
+
+@ObjectType()
+class SupportTicketType {
+  @Field(() => ID) id!: string;
+  @Field() subject!: string;
+  @Field() message!: string;
+  @Field() status!: string;
+  @Field() createdAt!: string;
+  @Field({ nullable: true }) userEmail?: string;
+  @Field({ nullable: true }) userDisplayName?: string;
+  @Field(() => [SupportReplyType]) replies!: SupportReplyType[];
 }
 
 @ObjectType()
@@ -1143,5 +1169,112 @@ export class MeResolver {
   @Query(() => [SubscriptionEventType])
   async adminSubscriptionHistory(@Args('firebaseUid') firebaseUid: string) {
     return (await getSubscriptionHistory(firebaseUid)) as SubscriptionEventType[];
+  }
+
+  // ── Contact Support ────────────────────────────────────────────────────────
+
+  @UseGuards(AuthGuard)
+  @Mutation(() => Boolean)
+  async createSupportTicket(
+    @CurrentUser() user: admin.auth.DecodedIdToken,
+    @Args('subject') subject: string,
+    @Args('message') message: string,
+  ): Promise<boolean> {
+    await createSupportTicket(user.uid, subject, message);
+    // Notify all admins of the new ticket (best-effort)
+    void (async () => {
+      try {
+        const admins = (await getAdminUsers()) as { firebaseUid: string }[];
+        await Promise.allSettled(
+          admins.map((a) =>
+            createNotification(
+              a.firebaseUid,
+              'New Support Ticket 💬',
+              `A user submitted a support request: "${subject}"`,
+              'SUPPORT_TICKET',
+            ),
+          ),
+        );
+      } catch {}
+    })();
+    return true;
+  }
+
+  @UseGuards(AuthGuard)
+  @Query(() => [SupportTicketType])
+  async mySupportTickets(@CurrentUser() user: admin.auth.DecodedIdToken) {
+    const tickets = (await getMySupportTickets(user.uid)) as any[];
+    return tickets.map((t: any) => ({
+      id: t.id,
+      subject: t.subject,
+      message: t.message,
+      status: t.status,
+      createdAt: t.createdAt,
+      userEmail: undefined,
+      userDisplayName: undefined,
+      replies: (t.replies ?? []).map((r: any) => ({
+        id: r.id,
+        fromAdmin: r.fromAdmin,
+        senderUid: r.senderUid,
+        message: r.message,
+        createdAt: r.createdAt,
+      })),
+    }));
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => [SupportTicketType])
+  async adminAllSupportTickets() {
+    const tickets = (await adminGetAllSupportTickets()) as any[];
+    return tickets.map((t: any) => ({
+      id: t.id,
+      subject: t.subject,
+      message: t.message,
+      status: t.status,
+      createdAt: t.createdAt,
+      userEmail: t.user?.email ?? null,
+      userDisplayName: t.user?.displayName ?? null,
+      replies: (t.replies ?? []).map((r: any) => ({
+        id: r.id,
+        fromAdmin: r.fromAdmin,
+        senderUid: r.senderUid,
+        message: r.message,
+        createdAt: r.createdAt,
+      })),
+    }));
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminReplyToSupportTicket(
+    @CurrentUser() adminUser: admin.auth.DecodedIdToken,
+    @Args('ticketId') ticketId: string,
+    @Args('message') message: string,
+  ): Promise<boolean> {
+    await adminReplyToTicket(ticketId, adminUser.uid, message);
+    // Notify the ticket owner (best-effort)
+    void (async () => {
+      try {
+        const tickets = (await adminGetAllSupportTickets()) as any[];
+        const ticket = tickets.find((t: any) => t.id === ticketId);
+        if (ticket?.user?.firebaseUid) {
+          await createNotification(
+            ticket.user.firebaseUid,
+            'Support Reply 💬',
+            `Admin replied to your ticket "${ticket.subject}": "${message.slice(0, 80)}${message.length > 80 ? '...' : ''}"`,
+            'SUPPORT_REPLY',
+            ticketId,
+          );
+        }
+      } catch {}
+    })();
+    return true;
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Boolean)
+  async adminCloseSupportTicket(@Args('ticketId') ticketId: string): Promise<boolean> {
+    await adminCloseTicket(ticketId);
+    return true;
   }
 }
