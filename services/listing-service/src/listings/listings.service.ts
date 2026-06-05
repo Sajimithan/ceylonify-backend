@@ -214,10 +214,10 @@ export class ListingsService {
     if (dto.isPremium !== undefined) listing.isPremium = dto.isPremium;
 
     // Mark as repost if it was previously suspended or rejected, then reset to PENDING.
+    // Keep suspensionReason so admin can see why it was suspended when reviewing the repost.
     const wasResubmitted = listing.status === ListingStatus.SUSPENDED || listing.status === ListingStatus.REJECTED;
     listing.status = ListingStatus.PENDING;
     listing.rejectReason = undefined;
-    listing.suspensionReason = undefined;
     listing.isRepost = wasResubmitted;
 
     return this.repo.save(listing);
@@ -270,6 +270,7 @@ export class ListingsService {
 
     listing.status = ListingStatus.APPROVED;
     listing.rejectReason = undefined;
+    listing.suspensionReason = undefined;
     listing.isRepost = false;
 
     const saved = await this.repo.save(listing);
